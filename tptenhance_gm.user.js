@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name		Powder Toy enhancements
-// @namespace   tpt
+// @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		1
+// @version		2
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // ==/UserScript==
 
+// Fix silly way of checking whether facebook stuff is loaded
+// If facebook is blocked, then the javascript on powdertoy.co.uk errors and does not execute important stuff like callbacks for showing tag info popups
 contentEval('if (typeof window.FB == "undefined") window.FB = false;');
 
 contentEval(function(){
@@ -31,7 +33,7 @@ contentEval(function(){
 		},
 		disableTagUrl:function(tag)
 		{
-			return "/Browse/Tags.html?Delete="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey())+"&"+location.search.substr(1);
+			return "/Browse/Tags.html?Delete="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
 		},
 		removeTagUrl:function(tag, saveId)
 		{
@@ -47,7 +49,9 @@ contentEval(function(){
 			var inner = $('<div class="popover-inner"></div>').appendTo(popOver);
 			var title = $('<h3 class="popover-title">Tag Info</h3>').appendTo(inner);
 			var content = $('<div class="popover-content">Loading...</div>').appendTo(inner);
-			popOver.css("left", element.offset().left - (popOver.width()/2) + (element.width()/2));
+			var left = element.offset().left - (popOver.width()/2) + (element.width()/2);
+			if (left<0) left = 0;
+			popOver.css("left", left);
 			popOver.css("top", element.offset().top + element.height());
 			var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(tag);
 			$.get(getLocation, function(data){
@@ -91,7 +95,9 @@ contentEval(function(){
 			var inner = $('<div class="popover-inner"></div>').appendTo(popOver);
 			var title = $('<h3 class="popover-title">Tag Info</h3>').appendTo(inner);
 			var content = $('<div class="popover-content">Loading...</div>').appendTo(inner);
-			popOver.css("left", element.offset().left - (popOver.width()/2) + (element.width()/2));
+			var left = element.offset().left - (popOver.width()/2) + (element.width()/2);
+			if (left<0) left = 0;
+			popOver.css("left", left);
 			popOver.css("top", element.offset().top + element.height());
 			var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(tag)+"&SaveID="+encodeURIComponent(saveId);
 			$.get(getLocation, function(data){
@@ -106,6 +112,17 @@ contentEval(function(){
 						element.remove();
 						$(".popover").remove();
 					});
+					var disableButton = $('<a class="pull-right" title="Disable tag">Disable</a>');
+					disableButton.attr('href',tptenhance.disableTagUrl(tag)+"&Redirect="+encodeURIComponent(location.pathname+location.search));
+					disableButton.css('margin-right','10px');
+					disableButton.appendTo($(this));
+					disableButton.on('click', function(e){
+						e.preventDefault();
+						$.get($(this).attr('href'));
+						element.remove();
+						$(".popover").remove();
+					});
+					
 				});
 			}, "html");
 		},
@@ -141,6 +158,7 @@ contentEval(function(){
 				e.preventDefault();
 				$.get($(this).attr('href'));
 				$(this).parents('div.Tag').remove();
+				$(".popover").remove();
 			});
 		});
 	}
@@ -168,6 +186,7 @@ contentEval(function(){
 					e.preventDefault();
 					$.get($(this).attr('href'));
 					$(this).parents('div.Tag').remove();
+					$(".popover").remove();
 				});
 			},1);
 		});
@@ -205,6 +224,8 @@ function addCss(cssString)
 }
 addCss('\
 .Tag .DelButton { top:auto; background-color:transparent; }\
+.popover-inner { width:380px; }\
 '
 ); 
+
 
