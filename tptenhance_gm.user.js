@@ -3,9 +3,11 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2
+// @version		2.02
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
+// @updateURL   https://userscripts.org/scripts/source/173466.meta.js
+// @downloadURL   https://userscripts.org/scripts/source/173466.user.js
 // ==/UserScript==
 
 // Fix silly way of checking whether facebook stuff is loaded
@@ -20,7 +22,7 @@ contentEval(function(){
 			if (tptenhance.sessionKey=="")
 			{
 				$('.main-menu').find('a').each(function(){
-					var url = $(this).attr('href');
+					var url = this.href;
 					var matches = url.match(/Logout.html\?Key=[A-Za-z0-9]+/)
 					if (matches)
 					{
@@ -58,6 +60,18 @@ contentEval(function(){
 				content.html(data);
 				var separator = false;
 				var currentUserName = $('.SubmenuTitle').text();
+				var clickFn = function(e){
+					e.preventDefault();
+					$.get(this.href);
+					var tagInfo = $(this).parents('div.TagInfo');
+					if (!tagInfo.next().length || tagInfo.next().is('hr'))
+					{
+						element.parents(".Tag").remove();
+						$(".popover").remove();
+						return;
+					}
+					tagInfo.remove();
+				};
 				content.find('div.TagInfo').each(function(){
 					var tagInfo = $(this);
 					var saveId = $(tagInfo.find("a")[0]).text();
@@ -65,18 +79,7 @@ contentEval(function(){
 					var delButton = $('<a class="pull-right" title="Remove tag from this save">Remove</a>');
 					delButton.attr('href',tptenhance.removeTagUrl(tag,saveId));
 					delButton.appendTo($(this));
-					delButton.on('click', function(e){
-						e.preventDefault();
-						$.get($(this).attr('href'));
-						var tagInfo = $(this).parents('div.TagInfo');
-						if (!tagInfo.next().length || tagInfo.next().is('hr'))
-						{
-							element.parents(".Tag").remove();
-							$(".popover").remove();
-							return;
-						}
-						tagInfo.remove();
-					});
+					delButton.on('click', clickFn);
 					// If on a user moderation page, show tags from other users at the end
 					if (filterUser && userName!=currentUserName)
 					{
@@ -108,7 +111,7 @@ contentEval(function(){
 					delButton.appendTo($(this));
 					delButton.on('click', function(e){
 						e.preventDefault();
-						$.get($(this).attr('href'));
+						$.get(this.href);
 						element.remove();
 						$(".popover").remove();
 					});
@@ -118,7 +121,7 @@ contentEval(function(){
 					disableButton.appendTo($(this));
 					disableButton.on('click', function(e){
 						e.preventDefault();
-						$.get($(this).attr('href'));
+						$.get(this.href);
 						element.remove();
 						$(".popover").remove();
 					});
@@ -129,11 +132,11 @@ contentEval(function(){
 		LoadForumBlocks:function(){
 			tptenhance.oldLoadForumBlocks();
 			$(".Actions > a").each(function(){
-				if ($(this).attr('href').indexOf("/UnhidePost.html")!=-1)
+				if (this.href.indexOf("/UnhidePost.html")!=-1)
 				{
 					$(this).click(function(e){
 						e.preventDefault();
-						$.get($(this).attr('href'));
+						$.get(this.href);
 						var newElement = $(this).parents('.Comment').children('.Message');
 						postID = newElement.attr('id').split("-")[1];
 						$.get("/Discussions/Thread/Post.json?Post="+postID, function(data){
@@ -143,7 +146,37 @@ contentEval(function(){
 					});
 				}
 			});
+		},
+		updateSaveComments:function(Link){
+			$("#ActionSpinner").fadeIn("fast");
+			$.get(Link, function(data){
+				$("#ActionSpinner").fadeOut("fast");
+				$(".Pagination").html(data.Pagination);
+				$("ul.MessageList").empty();
+				$("ul.MessageList").html(data.Comments);
+				tptenhance.attachSaveCommentHandlers();
+			}, "json");
+		},
+		attachSaveCommentHandlers:function(){
+			var clickFn = function(e){
+				e.preventDefault();
+				$.get(this.href, function(){tptenhance.updateSaveComments(window.lastComments)});
+				$(this).parents('.Post').remove();
+				return false;
+			}
+			$(".Actions a").each(function(){
+				if (this.href.indexOf('DeleteComment=')!=-1)
+					$(this).click(clickFn);
+			});
+			$(".Pagination a").die('click');
+			$(".Pagination a").on('click', function(e){
+				Link = this.href.replace(/\.html\?/, ".json?Mode=MessagesOnly&");
+				tptenhance.updateSaveComments(Link);
+				window.lastComments = this.href;
+				e.preventDefault();
+			});
 		}
+			
 	}
 	// Override tag info popups, and add them to the user moderation page
 	// The overridden version has links to delete (instead of disabling) tags, and disabling+deleting is done in an Ajax request (no full page reload)
@@ -156,7 +189,7 @@ contentEval(function(){
 			$("div.Tag .DelButton").attr('title', 'Disable');// A clearer tooltip
 			$("div.Tag .DelButton").on('click', function(e){
 				e.preventDefault();
-				$.get($(this).attr('href'));
+				$.get(this.href);
 				$(this).parents('div.Tag').remove();
 				$(".popover").remove();
 			});
@@ -164,12 +197,14 @@ contentEval(function(){
 	}
 	if (window.location.toString().indexOf("/Browse/View.html")!=-1)
 	{
+		window.lastComments = window.location.toString();
 		$(document).bind("ready", function(){
 			setTimeout(function(){
 				$("span.Tag").die('click');
 				$("span.Tag").on('click', function(){
 					tptenhance.tagTooltip($(this), $(this).text(), currentSaveID);
 				});
+				tptenhance.attachSaveCommentHandlers();
 			},1);
 		});
 	}
@@ -184,7 +219,7 @@ contentEval(function(){
 				$("div.Tag .DelButton").attr('title', 'Disable');
 				$("div.Tag .DelButton").on('click', function(e){
 					e.preventDefault();
-					$.get($(this).attr('href'));
+					$.get(this.href);
 					$(this).parents('div.Tag').remove();
 					$(".popover").remove();
 				});
@@ -227,5 +262,4 @@ addCss('\
 .popover-inner { width:380px; }\
 '
 ); 
-
 
