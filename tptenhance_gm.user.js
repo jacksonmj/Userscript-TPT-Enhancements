@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.05
+// @version		2.06
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -137,14 +137,18 @@ contentEval(function(){
 		updateSaveComments:function(url, from){
 			$("#ActionSpinner").fadeIn("fast");
 			tptenhance.commentPageRequestType = from;
-			tptenhance.commentPageRequest = $.get(url.replace(/\.html\?/, ".json?Mode=MessagesOnly&"), function(data){
+			// url = url.replace(/\.html\?/, ".json?Mode=MessagesOnly&");
+			tptenhance.commentPageRequest = $.get(url, function(data){
+				data = $(data);
 				$("#ActionSpinner").fadeOut("fast");
 				tptenhance.commentPageRequest = false;
-				$(".Pagination").html(data.Pagination);
-				$("ul.MessageList").empty();
-				$("ul.MessageList").html(data.Comments);
+				//$(".Pagination").html(data.Pagination);
+				$(".Pagination").replaceWith(data.find(".Pagination"));
+				//$("ul.MessageList").empty();
+				//$("ul.MessageList").html(data.Comments);
+				$("ul.MessageList").replaceWith(data.find("ul.MessageList"));
 				tptenhance.attachSaveCommentHandlers();
-			}, "json");
+			}, "html");//"json"
 		},
 		commentPageRequest:false,
 		commentPageRequestType:false,
