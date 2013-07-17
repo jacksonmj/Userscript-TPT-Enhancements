@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.06
+// @version		2.07
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -43,30 +43,56 @@ contentEval(function(){
 		{
 			return "/Browse/EditTag.json?Op=delete&ID="+encodeURIComponent(saveId)+"&Tag="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
 		},
+		popoverSelectedTag:false,
+		popoverElement:false,
+		updatePopoverPosition:function()
+		{
+			var element = tptenhance.popoverElement;
+			var popOver = $(".popover");
+			if (!popOver.length || !element) return;
+			var left = element.offset().left - (popOver.width()/2) + (element.width()/2);
+			if (left<0) left = 0;
+			popOver.css("left", left);
+			popOver.css("top", element.offset().top + element.height());
+		},
+		removePopover:function()
+		{
+			tptenhance.popoverElement = false;
+			tptenhance.popoverSelectedTag = false;
+			$(".popover").remove();
+		},
 		createTagsPopover:function(element)
 		{
-			$(".popover").remove();
+			tptenhance.removePopover();
+			tptenhance.popoverElement = element;
 			var popOver = $('<div class="popover fade bottom in" style="display: block;"></div>');
 			popOver.appendTo(document.body);
 			var arrow = $('<div class="arrow"></div>').appendTo(popOver);
 			var inner = $('<div class="popover-inner"></div>').appendTo(popOver);
 			var title = $('<h3 class="popover-title">Tag Info</h3>').appendTo(inner);
 			var content = $('<div class="popover-content">Loading...</div>').appendTo(inner);
-			var left = element.offset().left - (popOver.width()/2) + (element.width()/2);
-			if (left<0) left = 0;
-			popOver.css("left", left);
-			popOver.css("top", element.offset().top + element.height());
+			tptenhance.updatePopoverPosition();
 			return content;
 		},
 		tagsTooltip:function(element, tag){
 			// Tag info for multiple tags (e.g. /Browse/Tags.html and moderation page
+
+			// If clicking on the tag that is already open, close the info popup
+			if (tag==tptenhance.popoverSelectedTag)
+			{
+				tptenhance.removePopover();
+				return;
+			}
+
 			var filterUser = (window.location.toString().indexOf("/User/Moderation.html")!=-1);
 			var content = tptenhance.createTagsPopover(element);
+			tptenhance.popoverSelectedTag = tag;
 			var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(tag);
 			$.get(getLocation, function(data){
 				content.html(data);
 				var separator = false;
 				var currentUserName = $('.SubmenuTitle').text();
+				// Go through the tags in the popup and add Remove links
 				content.find('div.TagInfo').each(function(){
 					var tagInfo = $(this);
 					var saveId = $(tagInfo.find("a")[0]).text();
@@ -86,20 +112,32 @@ contentEval(function(){
 		},
 		tagTooltip:function(element, tag, saveId){
 			// Tag info for a single tag, e.g. viewing a save
+
+			// If clicking on the tag that is already open, close the info popup
+			if (tag==tptenhance.popoverSelectedTag)
+			{
+				tptenhance.removePopover();
+				return;
+			}
+
 			var content = tptenhance.createTagsPopover(element);
+			tptenhance.popoverSelectedTag = tag;
 			var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(tag)+"&SaveID="+encodeURIComponent(saveId);
 			$.get(getLocation, function(data){
 				content.html(data);
 				var clickFunc = function(e){
 					e.preventDefault();
 					var url = this.href;
-					if ($(this).text()=="Disable")
-						$(this).replaceWith('<div class="pull-right label label-info" style="margin-right:10px;"><i class="icon-refresh icon-white"></i> <strong>Disabling...</strong></div>');
+					var that = $(this);
+					if (that.text()=="Disable")
+						that.replaceWith('<div class="pull-right label label-info" style="margin-right:10px;"><i class="icon-refresh icon-white"></i> <strong>Disabling...</strong></div>');
 					else
-						$(this).replaceWith(tptenhance.deletingHtml);
+						that.replaceWith(tptenhance.deletingHtml);
 					$.get(url,function(){
-						element.remove();
-						$(".popover").remove();
+						element.remove();// remove tag text
+						if (tptenhance.popoverSelectedTag==tag)
+							tptenhance.removePopover();// remove tag info popup
+						tptenhance.updatePopoverPosition();
 					});
 				};
 				content.find('div.TagInfo').each(function(){
@@ -112,7 +150,6 @@ contentEval(function(){
 					disableButton.css('margin-right','10px');
 					disableButton.appendTo($(this));
 					disableButton.on('click', clickFunc);
-					
 				});
 			}, "html");
 		},
@@ -202,7 +239,9 @@ contentEval(function(){
 			},
 			disableButtonClick:function(e){
 				e.preventDefault();
-				$(".popover").remove();
+				var tag = $(this).parents('.Tag').find(".TagText").text();
+				if (tptenhance.popoverSelectedTag==tag)
+					tptenhance.removePopover();
 				var tagElem = $(this).parents('.Tag');
 				var url = this.href.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(tptenhance.dummyUrl));
 				$(this).parent().append(' <i class="icon-refresh pull-right"></i>');
@@ -259,12 +298,7 @@ contentEval(function(){
 				tptenhance.tagsTooltip($(this), $(this).text());
 			});
 			$("div.Tag .DelButton").attr('title', 'Disable');// A clearer tooltip
-			$("div.Tag .DelButton").on('click', function(e){
-				e.preventDefault();
-				$.get(this.href);
-				$(this).parents('div.Tag').remove();
-				$(".popover").remove();
-			});
+			$("div.Tag .DelButton").on('click', tptenhance.tags.disableButtonClick);
 			// ajax for deleting comments
 			var clickFn = function(e){
 				e.preventDefault();
