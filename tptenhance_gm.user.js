@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.03
+// @version		2.05
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -134,25 +134,40 @@ contentEval(function(){
 				}
 			});
 		},
-		updateSaveComments:function(url){
+		updateSaveComments:function(url, from){
 			$("#ActionSpinner").fadeIn("fast");
-			$.get(url.replace(/\.html\?/, ".json?Mode=MessagesOnly&"), function(data){
+			tptenhance.commentPageRequestType = from;
+			tptenhance.commentPageRequest = $.get(url.replace(/\.html\?/, ".json?Mode=MessagesOnly&"), function(data){
 				$("#ActionSpinner").fadeOut("fast");
+				tptenhance.commentPageRequest = false;
 				$(".Pagination").html(data.Pagination);
 				$("ul.MessageList").empty();
 				$("ul.MessageList").html(data.Comments);
 				tptenhance.attachSaveCommentHandlers();
 			}, "json");
 		},
+		commentPageRequest:false,
+		commentPageRequestType:false,
+		commentDeleteWaiting:0,
 		attachSaveCommentHandlers:function(){
 			var clickFn = function(e){
 				e.preventDefault();
 				var url = this.href+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl);
 				var info = $(tptenhance.deletingHtml);
 				$(this).parents('.Actions').replaceWith(info);
+				tptenhance.commentDeleteWaiting++;
+				if (tptenhance.commentPageRequest && tptenhance.commentPageRequestType=="deleteComment")
+				{
+					tptenhance.commentPageRequest.abort();
+					tptenhance.commentPageRequest = false;
+				}
 				$.get(url, function(){
 					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted.</strong>');
-					tptenhance.updateSaveComments(window.lastComments);
+					tptenhance.commentDeleteWaiting--;
+					if (tptenhance.commentDeleteWaiting<=0)
+					{
+						tptenhance.updateSaveComments(window.lastComments, "deleteComment");
+					}
 				});
 				return false;
 			}
@@ -164,7 +179,9 @@ contentEval(function(){
 			$(".Pagination a").on('click', function(e){
 				e.preventDefault();
 				window.lastComments = this.href;
-				tptenhance.updateSaveComments(window.lastComments);
+				if (tptenhance.commentPageRequest)
+					tptenhance.commentPageRequest.abort();
+				tptenhance.updateSaveComments(window.lastComments, "pagination");
 			});
 		},
 		tags:
@@ -233,7 +250,7 @@ contentEval(function(){
 	// The overridden version has links to delete (instead of disabling) tags, and disabling+deleting is done in an Ajax request (no full page reload)
 	if (window.location.toString().indexOf("/User/Moderation.html")!=-1)
 	{
-		$(document).bind("ready", function(){
+		$(document).ready(function(){
 			$("span.TagText").on('click', function(){
 				tptenhance.tagsTooltip($(this), $(this).text());
 			});
@@ -265,7 +282,7 @@ contentEval(function(){
 	if (window.location.toString().indexOf("/Browse/View.html")!=-1)
 	{
 		window.lastComments = window.location.toString();
-		$(document).bind("ready", function(){
+		$(document).ready(function(){
 			setTimeout(function(){
 				$("span.Tag").die('click');
 				$("span.Tag").on('click', function(){
@@ -277,7 +294,7 @@ contentEval(function(){
 	}
 	if (window.location.toString().indexOf("/Browse/Tags.html")!=-1)
 	{
-		$(document).bind("ready", function(){
+		$(document).ready(function(){
 			setTimeout(function(){
 				$("span.TagText").die('click');
 				$("span.TagText").on('click', function(){
@@ -306,8 +323,7 @@ contentEval(function(){
 			});
 		});
 	}
-	
-}.toSource()+'()');
+});
 
 function addCss(cssString)
 {
@@ -323,4 +339,5 @@ addCss('\
 .popover-inner { width:380px; }\
 '
 ); 
+
 
