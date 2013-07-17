@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.07
+// @version		2.08
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -43,6 +43,10 @@ contentEval(function(){
 		{
 			return "/Browse/EditTag.json?Op=delete&ID="+encodeURIComponent(saveId)+"&Tag="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
 		},
+		searchTagUrl:function(search)
+		{
+			return "/Browse/Tags.html?Search_Query="+encodeURIComponent(search);
+		},
 		popoverSelectedTag:false,
 		popoverElement:false,
 		updatePopoverPosition:function()
@@ -75,7 +79,7 @@ contentEval(function(){
 			return content;
 		},
 		tagsTooltip:function(element, tag){
-			// Tag info for multiple tags (e.g. /Browse/Tags.html and moderation page
+			// Tag info for tags in multiple places (e.g. /Browse/Tags.html and moderation page
 
 			// If clicking on the tag that is already open, close the info popup
 			if (tag==tptenhance.popoverSelectedTag)
@@ -111,7 +115,7 @@ contentEval(function(){
 			}, "html");
 		},
 		tagTooltip:function(element, tag, saveId){
-			// Tag info for a single tag, e.g. viewing a save
+			// Tag info for a tag in a single place, e.g. viewing a save
 
 			// If clicking on the tag that is already open, close the info popup
 			if (tag==tptenhance.popoverSelectedTag)
@@ -147,9 +151,19 @@ contentEval(function(){
 					delButton.on('click', clickFunc);
 					var disableButton = $('<a class="pull-right" title="Disable tag">Disable</a>');
 					disableButton.attr('href',tptenhance.disableTagUrl(tag)+"&Redirect="+encodeURIComponent(location.pathname+location.search));
-					disableButton.css('margin-right','10px');
+					disableButton.css('margin','0 10px');
 					disableButton.appendTo($(this));
 					disableButton.on('click', clickFunc);
+					var showMore = $('<div style="text-align:right"><a>Show uses on other saves</a></div>');
+					showMore.appendTo($(this));
+					showMore = showMore.find("a");
+					showMore.attr('href',tptenhance.searchTagUrl(tag));
+					showMore.on('click', function(e){
+						e.preventDefault();
+						tptenhance.removePopover();
+						tptenhance.tagsTooltip(element, tag);
+					});
+					
 				});
 			}, "html");
 		},
