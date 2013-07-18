@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.08
+// @version		2.09
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -258,7 +258,7 @@ contentEval(function(){
 					tptenhance.removePopover();
 				var tagElem = $(this).parents('.Tag');
 				var url = this.href.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(tptenhance.dummyUrl));
-				$(this).parent().append(' <i class="icon-refresh pull-right"></i>');
+				$(this).parent().append(' <span class="LoadingIcon"><i class="icon-refresh"></i></span>');
 				$(this).css('display','none');
 				$.get(url, function()
 				{
@@ -269,7 +269,7 @@ contentEval(function(){
 				e.preventDefault();
 				var tagElem = $(this).parents('.Tag');
 				var url = this.href.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(tptenhance.dummyUrl));
-				$(this).parent().append(' <i class="icon-refresh pull-right"></i>');
+				$(this).parent().append(' <span class="LoadingIcon"><i class="icon-refresh"></i></span>');
 				$(this).css('display','none');
 				$.get(url, function()
 				{
@@ -388,6 +388,7 @@ function addCss(cssString)
 }
 addCss('\
 .Tag .DelButton, .Tag .UnDelButton { top:auto; background-color:transparent; }\
+.Tag .LoadingIcon { position:absolute; right:3px; line-height:20px; }\
 .popover-inner { width:380px; }\
 '
 ); 
