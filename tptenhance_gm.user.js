@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.09
+// @version		2.10
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -178,7 +178,7 @@ contentEval(function(){
 						var newElement = $(this).parents('.Comment').children('.Message');
 						postID = newElement.attr('id').split("-")[1];
 						$.get("/Discussions/Thread/Post.json?Post="+postID, function(data){
-							location.reload();
+							location.reload(true);
 							// TODO: reload like http://powdertoy.co.uk/Applications/Application.Discussions/Javascript/Thread.js $(".Pagination a") click does
 						});
 					});
@@ -328,6 +328,15 @@ contentEval(function(){
 			$(".Actions a").each(function(){
 				if (this.href.indexOf('DeleteComment=')!=-1)
 					$(this).click(clickFn);
+			});
+			$(".UnBanUser form").on('submit', function(e){
+				// Fix incorrect redirect
+				e.preventDefault();
+				var formData = $(this).serialize();
+				$(this).find('input[type="submit"]').attr('disabled','disabled');
+				$.post($(this).attr('action'), formData, function(){
+					location.reload(true);
+				});
 			});
 		});
 	}
