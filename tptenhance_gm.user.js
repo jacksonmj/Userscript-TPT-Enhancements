@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.11
+// @version		2.12
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -340,6 +340,26 @@ contentEval(function(){
 					location.reload(true);
 					submitButton.attr("value", "Redirecting...");
 				});
+			});
+			$(".BanUser form").on('submit', function(e){
+				// Try to prevent accidental perm bans
+				var form = $(".BanUser form");
+				if (form.find('select[name="BanTimeSpan"]').val()!="p")
+				{
+					var banTime = form.find('input[name="BanTime"]').val();
+					if (banTime.toString() != (+banTime).toString() || (+banTime)<=0)
+					{
+						alert("Enter a ban time, or select 'Perm' from the dropdown box");
+						e.preventDefault();
+						return false;
+					}
+					else if (form.find('input[name="BanReason"]').val() == "Ban Reason")
+					{
+						alert("Enter a ban reason");
+						e.preventDefault();
+						return false;
+					}
+				}
 			});
 		});
 	}
