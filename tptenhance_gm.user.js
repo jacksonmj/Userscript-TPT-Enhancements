@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.10
+// @version		2.11
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -217,7 +217,7 @@ contentEval(function(){
 					tptenhance.commentPageRequest = false;
 				}
 				$.get(url, function(){
-					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted.</strong>');
+					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong>');
 					tptenhance.commentDeleteWaiting--;
 					if (tptenhance.commentDeleteWaiting<=0)
 					{
@@ -248,7 +248,7 @@ contentEval(function(){
 				var info = $(tptenhance.deletingHtml);
 				$(this).replaceWith(info);
 				$.get(url, function(){
-					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted.</strong></div>');
+					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong></div>');
 				});
 			},
 			disableButtonClick:function(e){
@@ -333,9 +333,12 @@ contentEval(function(){
 				// Fix incorrect redirect
 				e.preventDefault();
 				var formData = $(this).serialize();
-				$(this).find('input[type="submit"]').attr('disabled','disabled');
-				$.post($(this).attr('action'), formData, function(){
+				var submitButton = $(this).find('input[type="submit"]');
+				submitButton.attr('disabled','disabled');
+				submitButton.attr("value", "Loading...");
+				$.post($(this).attr('action'), formData).always(function(){
 					location.reload(true);
+					submitButton.attr("value", "Redirecting...");
 				});
 			});
 		});
