@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.12
+// @version		2.13
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -328,18 +328,6 @@ contentEval(function(){
 			$(".Actions a").each(function(){
 				if (this.href.indexOf('DeleteComment=')!=-1)
 					$(this).click(clickFn);
-			});
-			$(".UnBanUser form").on('submit', function(e){
-				// Fix incorrect redirect
-				e.preventDefault();
-				var formData = $(this).serialize();
-				var submitButton = $(this).find('input[type="submit"]');
-				submitButton.attr('disabled','disabled');
-				submitButton.attr("value", "Loading...");
-				$.post($(this).attr('action'), formData).always(function(){
-					location.reload(true);
-					submitButton.attr("value", "Redirecting...");
-				});
 			});
 			$(".BanUser form").on('submit', function(e){
 				// Try to prevent accidental perm bans
