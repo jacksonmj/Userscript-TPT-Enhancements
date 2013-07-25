@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.13
+// @version		2.14
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -384,17 +384,37 @@ contentEval(function(){
 	}
 	if (window.location.toString().indexOf("/Discussions/Thread/HidePost.html")!=-1)
 	{
-		// To fix the site redirecting to the first page of the thread instead of the page with the post when a post is hidden
-		// submit form via Ajax request then redirect to the correct page ourselves
-		$('.FullForm').on('submit', function(e){
-			e.preventDefault();
-			var formData = $(this).serialize();
-			formData += "&Hide_Hide=Hide+Post";
-			$.post($(this).attr('action'), formData, function(){
-				window.location = '/Discussions/Thread/View.html?'+(window.location.search.match(/Post=[0-9]+/)[0]);
+		$(document).ready(function(){
+			// To fix the site redirecting to the first page of the thread instead of the page with the post when a post is hidden
+			// submit form via Ajax request then redirect to the correct page ourselves
+			$('.FullForm').on('submit', function(e){
+				e.preventDefault();
+				var formData = $(this).serialize();
+				formData += "&Hide_Hide=Hide+Post";
+				$.post($(this).attr('action'), formData, function(){
+					window.location = '/Discussions/Thread/View.html?'+(window.location.search.match(/Post=[0-9]+/)[0]);
+				});
 			});
 		});
 	}
+	if (window.location.toString().indexOf("/Groups/Thread/")!=-1)
+	{
+		$(document).ready(function(){
+			// WYSIWYG editor
+			tptenhance.wysiwygLoaded = 0;
+			var wysiwygPrepare = function()
+			{
+				tptenhance.wysiwygLoaded++;
+				if (tptenhance.wysiwygLoaded>=2)
+				{
+					WYSIWYG('#AddReplyMessage, textarea[name="Post_Message"], textarea[name="Thread_Message"]');
+				}
+			}
+			$.getScript("/Applications/Application.Discussions/Javascript/jQuery.TinyMCE.js", wysiwygPrepare);
+			$.getScript("/Applications/Application.Discussions/Javascript/WYSIWYG.js", wysiwygPrepare);
+		});
+	}
+	
 });
 
 function addCss(cssString)
@@ -411,6 +431,9 @@ addCss('\
 .Tag .LoadingIcon { position:absolute; right:3px; line-height:20px; }\
 .popover-inner { width:380px; }\
 '
-); 
-
+);
+if (window.location.toString().indexOf("/Groups/Thread/")!=-1)
+{
+	addCss('.Moderator .Author, .Administrator .Author { background-image: url("/Themes/Next/Design/Images/Shield.png"); }');
+}
 
