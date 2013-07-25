@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.14
+// @version		2.15
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -299,6 +299,41 @@ contentEval(function(){
 				btn.attr('title', 'Approve');
 				tptenhance.tags.attachHandlers(tagElem);
 			}
+		},
+		makeSaveLinks:function(messages)
+		{
+			messages.each(function(){
+				var msg = $(this);
+				var text = msg.text();
+				msg.empty();
+				var regex = /\b(?:(?:id|save|saveid)[^\d\w\s]?)?[0-9]+\b/gi;
+				var result, prevLastIndex = 0;
+				regex.lastIndex = 0;
+				while (result=regex.exec(text))
+				{
+					// Append the text before the match
+					msg.append($('<span></span>').text(text.slice(prevLastIndex, result.index)));
+					// Turn the match into a link
+					var link = $('<a></a>');
+					link.attr('href', tptenhance.saves.viewUrl(result[0].match(/[0-9]+/)[0]));
+					link.text(result[0]);
+					msg.append(link);
+					// store the position of the end of the match
+					prevLastIndex = regex.lastIndex;
+				}
+				// Append last plain text part
+				msg.append($('<span></span>').text(text.slice(prevLastIndex)));
+			});
+		},
+		saves:{
+			viewUrl:function(id)
+			{
+				return "/Browse/View.html?ID="+encodeURIComponent(id);
+			},
+			infoJsonUrl:function(id)
+			{
+				return "/Browse/View.json?ID="+encodeURIComponent(id);
+			}
 		}
 	}
 
@@ -414,7 +449,12 @@ contentEval(function(){
 			$.getScript("/Applications/Application.Discussions/Javascript/WYSIWYG.js", wysiwygPrepare);
 		});
 	}
-	
+	if (window.location.toString().indexOf("/Reports/View.html")!=-1)
+	{
+		$(document).ready(function(){
+			tptenhance.makeSaveLinks($(".Post .Message"));
+		});
+	}
 });
 
 function addCss(cssString)
