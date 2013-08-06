@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.15
+// @version		2.17
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -342,7 +342,7 @@ contentEval(function(){
 	// The overridden version has links to delete (instead of disabling) tags, and disabling+deleting is done in an Ajax request (no full page reload)
 	if (window.location.toString().indexOf("/User/Moderation.html")!=-1)
 	{
-		$(document).ready(function(){
+		$(document).ready(function(){setTimeout(function(){
 			$("span.TagText").on('click', function(){
 				tptenhance.tagsTooltip($(this), $(this).text());
 			});
@@ -364,19 +364,43 @@ contentEval(function(){
 				if (this.href.indexOf('DeleteComment=')!=-1)
 					$(this).click(clickFn);
 			});
-			$(".BanUser form").on('submit', function(e){
+			
+			/*
+			 * Existing submit hook:
+		if(reason.length < 2){
+			alert("Please provide a ban reason");
+			return false;
+		}
+		if(timespan.length > 0 && !isNumber(timespan)) {
+			alert("Ban time must be a number");
+			return false;	
+		}
+		if(parseFloat(timespan) < 0 || timetype == "p"){
+			return confirm("Are you sure you want to permanently ban this user, all the user's saves will be locked.");
+		}
+			* 
+			* This is replaced by the function below because:
+			* a) It's buggy. timespan=0 or timespan="" produces a perm ban without confirmation. 
+			* b) confirm isn't really necessary if several actions (changing the timespan dropdown value and clicking the ban button) have already been taken to indicate that yes, a perm ban is desired. 
+			*    Yeah, maybe an accidental perm ban while mashing keyboard or cat-on-keyboard is still possible, but I think it's sufficiently unlikely. 
+			*    The confirm() is a particular nuisance when trying to perm ban lots of accounts simultaneously for multiple account voting. 
+			*    Also, since pressing enter means submit for forms and OK for confirm dialogs, the confirm doesn't necessarily help if the enter button is accidentally pressed and gets stuck, or is trodden on by a cat.
+			*/
+			$(".BanUser form").off('submit').on('submit', function(e){
 				// Try to prevent accidental perm bans
 				var form = $(".BanUser form");
-				if (form.find('select[name="BanTimeSpan"]').val()!="p")
+				var banReason = form.find('input[name="BanReason"]').val();
+				var banTimeType = form.find('select[name="BanTimeSpan"]').val();
+				var banTime = form.find('input[name="BanTime"]').val();
+				if (banTimeType!="p")
 				{
-					var banTime = form.find('input[name="BanTime"]').val();
-					if (banTime.toString() != (+banTime).toString() || (+banTime)<=0)
+					if (banTime.toString() != (+banTime).toString() || (+banTime)<=0 || (+banTime)!=(+banTime))
 					{
 						alert("Enter a ban time, or select 'Perm' from the dropdown box");
 						e.preventDefault();
 						return false;
 					}
-					else if (form.find('input[name="BanReason"]').val() == "Ban Reason")
+					else if (banReason == "Ban Reason" || banReason.length < 2)
 					{
 						alert("Enter a ban reason");
 						e.preventDefault();
@@ -384,7 +408,7 @@ contentEval(function(){
 					}
 				}
 			});
-		});
+		},1);});
 	}
 	if (window.location.toString().indexOf("/Browse/View.html")!=-1)
 	{
@@ -436,6 +460,7 @@ contentEval(function(){
 	{
 		$(document).ready(function(){
 			// WYSIWYG editor
+			$("#AddReplyMessage").addClass("EditWYSIWYG");
 			tptenhance.wysiwygLoaded = 0;
 			var wysiwygPrepare = function()
 			{
@@ -443,6 +468,23 @@ contentEval(function(){
 				if (tptenhance.wysiwygLoaded>=2)
 				{
 					WYSIWYG('#AddReplyMessage, textarea[name="Post_Message"], textarea[name="Thread_Message"]');
+					window.GetRef = function(Username, PostID){
+						$('html, body').animate({scrollTop: $(document).height()}, 200);
+						$("#AddReplyMessage.EditPlain").insertAtCaret("@"+Username+"!"+PostID+"\n");
+						$("#AddReplyMessage.EditWYSIWYG").tinymce().execCommand('mceInsertContent',false, "<p>@"+Username+"!"+PostID+"</p><p></p>");
+					}
+					window.GetQuote = function(PostID, Element, Username){
+						$('html, body').animate({scrollTop: $(document).height()}, 200);
+						$.get("/Groups/Thread/Post.json?Type=Raw&Post="+PostID, function(data){
+							if(data.Status==1){
+								$("#AddReplyMessage.EditPlain").insertAtCaret("<p><cite>"+Username+"</cite>:</p><blockquote>"+data.Post+"</blockquote>");
+								$("#AddReplyMessage.EditWYSIWYG").tinymce().execCommand('mceInsertContent',false, "<p><cite>"+Username+"</cite>:</p><blockquote>"+data.Post+"</blockquote><p>&nbsp;</p>");
+							} else {
+								$("#AddReplyMessage.EditPlain").insertAtCaret("<p><cite>"+Username+"</cite>:</p><blockquote>"+$("#"+Element).text()+"</blockquote>");
+								$("#AddReplyMessage.EditWYSIWYG").tinymce().execCommand('mceInsertContent',false, "<p><cite>"+Username+"</cite>:</p><blockquote>"+$("#"+Element).text()+"</blockquote><p>&nbsp;</p>");
+							}
+						});	
+					}
 				}
 			}
 			$.getScript("/Applications/Application.Discussions/Javascript/jQuery.TinyMCE.js", wysiwygPrepare);
