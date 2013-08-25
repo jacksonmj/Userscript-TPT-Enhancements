@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.17
+// @version		2.18
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -333,7 +333,393 @@ contentEval(function(){
 			infoJsonUrl:function(id)
 			{
 				return "/Browse/View.json?ID="+encodeURIComponent(id);
+			},
+			voteMapUrl:function(id)
+			{
+				return "/IPTools.html?Save="+encodeURIComponent(id);
+			},
+			voteDataJsonUrl:function(id)
+			{
+				return "/IPTools/SaveVoteData.json?ID="+encodeURIComponent(id);
+			},
+			showVotes:function()
+			{
+				// some of this function is copied from the JS on the website
+
+				var m = [40, 40, 20, 20],
+				    w = 612 - m[1] - m[3],
+				    h = 300 - m[0] - m[2],
+				    parse = d3.time.format("%Y-%m-%d").parse,
+				    format = d3.time.format("%Y");
+				
+				// Scales. Note the inverted domain for the y-scale: bigger is up!
+				var x = d3.time.scale().range([0, w]),
+				    y = d3.scale.linear().range([h, 0]),
+				    xAxis = d3.svg.axis().scale(x).orient("bottom").tickSize(-h, 0).tickPadding(6),
+				    yAxis = d3.svg.axis().scale(y).orient("right").tickSize(-w).tickPadding(6);
+				
+				// An area generator.
+				var area = d3.svg.area()
+				    .interpolate("step-after")
+				    .x(function(d) { return x(d.date); })
+				    .y0(function(d) { return y((d.value<0)?d.value:0); })
+				    .y1(function(d) { return y((d.value>0)?d.value:0); });
+				
+				// A line generator.
+				var line = d3.svg.line()
+				    .interpolate("step-after")
+				    .x(function(d) { return x(d.date); })
+				    .y(function(d) { return y(d.value); });
+				
+				var svg = d3.select("#VoteGraph").append("svg:svg")
+				    .attr("width", w + m[1] + m[3])
+				    .attr("height", h + m[0] + m[2])
+				  .append("svg:g")
+				    .attr("transform", "translate(" + m[3] + "," + m[0] + ")");
+				
+				var gradient = svg.append("svg:defs").append("svg:linearGradient")
+				    .attr("id", "gradient")
+				    .attr("x2", "0%")
+				    .attr("y2", "100%");
+				
+				gradient.append("svg:stop")
+				    .attr("offset", "0%")
+				    .attr("stop-color", "#9ecae1")
+				    .attr("stop-opacity", .5);
+				
+				gradient.append("svg:stop")
+				    .attr("offset", "100%")
+				    .attr("stop-color", "#6baed6")
+				    .attr("stop-opacity", 1);
+				
+				svg.append("svg:clipPath")
+				    .attr("id", "clip")
+				  .append("svg:rect")
+				    .attr("x", x(0))
+				    .attr("y", y(1))
+				    .attr("width", x(1) - x(0))
+				    .attr("height", y(0) - y(1));
+				
+				svg.append("svg:g")
+				    .attr("class", "y axis")
+				    .attr("transform", "translate(" + w + ",0)");
+				
+				svg.append("svg:path")
+				    .attr("class", "area")
+				    .attr("clip-path", "url(#clip)")
+				    .style("fill", "url(#gradient)");
+				
+				svg.append("svg:g")
+				    .attr("class", "x axis")
+				    .attr("transform", "translate(0," + h + ")");
+				
+				svg.append("svg:path")
+				    .attr("class", "line")
+				    .attr("clip-path", "url(#clip)");
+				    
+				var voteLines = svg.append("svg:g");
+				    
+				var dupVLine;
+				
+				var rect = svg.append("svg:rect")
+				    .attr("class", "pane")
+				    .attr("width", w)
+				    .attr("height", h);
+				    //.call(d3.behavior.zoom().on("zoom", zoom));
+				
+				d3.json(tptenhance.saves.voteDataJsonUrl(currentSaveID), function(data) {
+				
+				// Parse dates and numbers.
+				data.votes.forEach(function(d) {
+					d.date = new Date(d.date*1000);//parse(d.date);
+					d.value = +d.value;
+				});
+				data.dupVotes.forEach(function(d) {
+					d.Date = new Date(d.Date*1000);//parse(d.date);
+				});
+
+				if (data.dupVotes.length)
+				{
+					var dupVotesDiv = $('<div></div>').addClass("DupVotes");
+					$('<h4>Suspicious votes (<a>see map</a>)</h4>').appendTo(dupVotesDiv).find('a').attr('href',tptenhance.saves.voteMapUrl(currentSaveID));
+					var dupVotesTbl = $('<table cellspacing="0" cellpadding="0"><thead><tr><th>Date</th><th>Username</th><th>IP address</th><th>&nbsp;</th></tr></thead><tbody></tbody></table>').appendTo(dupVotesDiv);
+					var dupVotesTblBody = dupVotesTbl.find('tbody');
+					var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+					var dupVotes = data.dupVotes.sort(function(a,b){return (+b.Date)-(+a.Date);});
+					var ipcolours = {};
+					var iplist = [];
+					dupVotes.forEach(function(d) {
+						if (typeof ipcolours[d.SourceAddress] == "undefined")
+						{
+							ipcolours[d.SourceAddress] = "";
+							iplist.push(d.SourceAddress);
+						}
+					});
+					if (iplist.length>1)
+					{
+						var hueStep = 340/iplist.length;
+						for (var i=0; i<iplist.length; i++)
+						{
+							ipcolours[iplist[i]] = 'hsl('+(hueStep*i)+',50%,80%)';
+						}
+					}
+					dupVotes.forEach(function(d) {
+						var tableRow = $('<tr></tr>');
+						var cell;
+						cell = $('<td><a></a></td>').addClass('Date').appendTo(tableRow);
+						var timeString = [('0'+d.Date.getHours()).slice(-2), ('0'+d.Date.getMinutes()).slice(-2), ('0'+d.Date.getSeconds()).slice(-2)].join(':');
+						cell.text([d.Date.getDate(), months[d.Date.getMonth()], d.Date.getFullYear(), timeString].join(' '));
+						cell = $('<td><a></a></td>').addClass('Username').appendTo(tableRow);
+						cell.children().first().attr('href', tptenhance.users.moderationUrlById(d.UserID)).text(d.Username);
+
+						/*
+						// This is a bootstrap tooltip, not the jquery tooltip plugin
+						var hoverTimeout = false;
+						var hovered = false;
+						cell.on("mouseleave", function(){
+							hovered = false;
+							if (hoverTimeout!==false)
+							{
+								clearTimeout(hoverTimeout);
+								hoverTimeout = false;
+							}
+						});
+						cell.on("mouseenter", function(evt, ui){
+							hovered = true;
+							var that = $(this);
+							if (hoverTimeout===false)
+							{
+								hoverTimeout = setTimeout(function(){
+									hoverTimeout = false;
+									that.off("mouseenter");
+									tptenhance.users.getModerationInfoById(d.UserID, function(data){
+										var txt = "";
+										if (data.Banned && data.Bans[0].Duration==0) txt += "Perm banned";
+										else
+										{
+											if (data.Banned)
+											{
+												txt += "Temp banned";
+												if (data.Bans.length>1)
+												{
+													txt += ", "+(data.Bans.length-1)+" previous ban";
+													if (data.Bans.length>2) txt += "s";
+												}	
+											}
+											else
+											{
+												txt += "Not currently banned";
+												if (data.Bans.length>0)
+												{
+													txt += ", "+data.Bans.length+" previous ban";
+													if (data.Bans.length>1) txt += "s";
+												}
+											}
+										}
+										
+										txt += "<br>";
+										if (!data.Comments.length && !data.Tags.length)
+											txt += "No tags or comments";
+										else
+										{
+											txt += data.Tags.length+" tags, ";
+											if (data.Comments.length>=10)
+												txt += "many comments";
+											else
+												txt += data.Comments.length+" comments";
+										}
+										// TODO: saves?
+										that.tooltip({title:txt, placement:"left"});
+										if (hovered) that.tooltip("show");
+									});
+								}, 50);
+							}
+						});*/
+						
+						cell = $('<td><a></a></td>').addClass('IPAddress').appendTo(tableRow);
+						cell.children().first().attr('href', tptenhance.IPMapUrl(d.SourceAddress)).text(d.SourceAddress);
+						if (iplist.length>1)
+						{
+							cell.on("mouseenter",function(){
+								var target = $(this).find("a").text();
+								$(this).parents("tbody").find("td.IPAddress").each(function(){
+									if ($(this).find("a").text() == target)
+										$(this).addClass("highlight");
+									else
+										$(this).removeClass("highlight");
+								});
+							});
+							cell.on("mouseleave",function(){
+								$(this).parents("tbody").find("td.IPAddress").removeClass("highlight");
+							});
+						}
+						if (typeof ipcolours[d.SourceAddress] != "undefined" && ipcolours[d.SourceAddress] != "")
+							cell.css('background-color', ipcolours[d.SourceAddress]);
+						cell = $('<td></td>').addClass('VoteType');
+						if (d.Vote==1) cell.html('<i class="VoteUpIcon icon-chevron-up icon-white"></i>');
+						else if (d.Vote==-1) cell.html('<i class="VoteDownIcon icon-chevron-down icon-white"></i>');
+						else cell.html('&nbsp;');
+						cell.appendTo(tableRow);
+						dupVotesTblBody.append(tableRow);
+					});
+					$("#VoteGraph").append(dupVotesDiv);
+				}
+
+				x.domain([d3.min(data.votes, function(d) { return d.date; }), d3.max(data.votes, function(d) { return d.date; })]);
+				var ydomain = d3.extent(data.votes, function(d) { return d.value; });
+				if (ydomain[0]>0) ydomain[0] = 0;
+				y.domain(ydomain);
+
+				rect.call(d3.behavior.zoom().x(x).on("zoom", zoom));
+
+				// Bind the data to our path elements.
+				svg.select("path.area").data([data.votes]);
+				svg.select("path.line").data([data.votes]);
+
+				function voteMouseover(d) {
+					//d.classed("active", true);
+					svg.selectAll(".dupVLine").classed("active", function(p) { return p.SourceAddress === d.SourceAddress; });
+				}
+
+				function voteMouseout() {
+					svg.selectAll(".active").classed("active", false);
+					//info.text(defaultInfo);
+				}				  
+				  
+				dupVLine = voteLines.selectAll("line.link")
+				.data(data.dupVotes);
+
+				var lineG = dupVLine.enter().insert("svg:g")
+				.attr("class", function(d) { return "dupVLine"+d.Vote+" dupVLine"; })
+				.on("mouseover", voteMouseover)
+				.on("mouseout", voteMouseout);
+
+				lineG.append("line")
+				.attr("x1", 0).attr("x2", 0).attr("y1", h).attr("y2", -5);
+
+				lineG.append("text")
+				.attr("text-anchor", "middle")
+				.attr('font-size', 11)
+				.attr("dy", ".1em")
+				.text(function(d) { return d.Username; });
+
+				lineG.append("text")
+				.attr("text-anchor", "middle")
+				.attr('font-size', 11)
+				.attr("dy", ".1em")
+				.attr("transform", "translate(0, 14)")
+				.text(function(d) { return d.SourceAddress; });
+
+				//.x1(function(d) { return x(d.Date); })
+				//.y1(function(d) { return y(100); });
+				//.style("stroke-width", function(d) { return Math.sqrt(d.value); });
+
+				dupVLine.exit().remove();
+			
+		/*link.enter().insert("svg:line", ".node")
+			.attr("class", "link")
+			.style("stroke-width", function(d) { return Math.sqrt(d.value); });
+			
+		link.exit().remove();*/
+				
+				  draw();
+				});
+				
+				function draw() {
+					svg.select("g.x.axis").call(xAxis);
+					svg.select("g.y.axis").call(yAxis);
+					svg.select("path.area").attr("d", area);
+					svg.select("path.line").attr("d", line);
+					/*dupVLine.attr("x1", function(d) { return x(d.Date); })
+						.attr("y1", function(d) { return h; })
+						.attr("x2", function(d) { return x(d.Date); })
+						.attr("y2", function(d) { return -5; });*/
+					dupVLine.attr("transform", function(d) { return "translate("+x(d.Date)+", 0)"; });
+					//svg.select("dupVotes.line").attr();
+				}
+
+				// Using a timeout here to defer drawing seems to improve zooming in Firefox on slow computers
+				// Possibly multiple calls to zoom are issued simultaneously depending on the amount of
+				// scroll wheel movement, and unnecessary redraws occur. The setTimeout defers drawing, 
+				// hopefully until after all zoom calls occur.
+				var zoomDrawTimeout = false;
+				function zoomDraw() {
+					zoomDrawTimeout = false;
+					draw();
+				}
+				function zoom() {
+					//d3.event.transform(x); // TODO d3.behavior.zoom should support extents
+					if (zoomDrawTimeout===false) zoomDrawTimeout = setTimeout(zoomDraw, 1);
+				}
 			}
+		},
+		users:{
+			moderationUrlById:function(id)
+			{
+				return "/User/Moderation.html?ID="+encodeURIComponent(id);
+			},
+			profileUrlById:function(id)
+			{
+				return "/User.html?ID="+encodeURIComponent(id);
+			},
+			parseModerationPage:function(html)
+			{
+				html = $(html).find(".Page");
+				var data = {};
+				data.Banned = (html.find(".UnBanUser").length>0);
+				data.KnownAddresses = [];
+				html.find(".KnownAddresses a").each(function(){data.KnownAddresses.push($(this).text());});
+				data.Comments = [];
+				html.find(".MessageList .Post").each(function(){
+					var comment = $(this);
+					data.Comments.push({
+						SaveID: +comment.find(".SaveInfo a").text(),
+						date: comment.find(".Date").text(),
+						CommentID: +comment.find(".Actions a").attr("href").match(/DeleteComment=[0-9]+/)[0].split("=")[1],
+						Message: comment.find(".Message").html()
+					});
+				});
+				data.Bans = [];
+				html.find(".BanHistory li").each(function(){
+					var ban = $(this);
+					var h6 = ban.find("h6").text().split(", ");
+					var otherText = ban.clone();
+					otherText.children().remove();
+					otherText = otherText.text().split("\"");
+					var duration = otherText.shift().replace("\s+$","").toLowerCase();
+					if (duration.indexOf("permanently")!=-1 || duration.indexOf("permenantly")!=-1)
+						duration = 0;
+					else if (duration.indexOf("hour")!=-1)
+						duration = 60*60*(+duration.split(" ")[0]);
+					else if (duration.indexOf("day")!=-1)
+						duration = 60*60*24*(+duration.split(" ")[0]);
+					else if (duration.indexOf("week")!=-1)
+						duration = 60*60*24*7*(+duration.split(" ")[0]);
+					else if (duration.indexOf("month")!=-1)
+						duration = 60*60*24*7*4*(+duration.split(" ")[0]); // 4 weeks seems right, e.g. a ban reported on IRC as 67200 hours shows as 100 months
+					otherText.pop();
+					data.Bans.push({
+						date: h6[0],
+						By: h6[1],
+						Reason: otherText.join("\""),
+						Duration: duration
+					});
+				});
+				data.Tags = [];
+				html.find(".TagText").each(function(){ data.Tags.push($(this).text()); });
+				data.SaveDeletions = +$(html.find(".Record .Information")[1]).text().match(/[0-9]+/)[0];
+				return data;
+			},
+			getModerationInfoById:function(id,callback)
+			{
+				$.get(tptenhance.users.moderationUrlById(id), function(data){
+					callback(tptenhance.users.parseModerationPage(data));
+				}, "html");
+			}
+		},
+		IPMapUrl:function(ip)
+		{
+			return "/IPTools.html?IP="+encodeURIComponent(ip);
 		}
 	}
 
@@ -421,6 +807,7 @@ contentEval(function(){
 				});
 				tptenhance.attachSaveCommentHandlers();
 			},1);
+			window.showSaveVotes = tptenhance.saves.showVotes;
 		});
 	}
 	if (window.location.toString().indexOf("/Browse/Tags.html")!=-1)
@@ -512,6 +899,18 @@ addCss('\
 .Tag .DelButton, .Tag .UnDelButton { top:auto; background-color:transparent; }\
 .Tag .LoadingIcon { position:absolute; right:3px; line-height:20px; }\
 .popover-inner { width:380px; }\
+.VoteUpIcon { background-color:#0C0; border:1px solid #080; }\
+.VoteDownIcon { background-color:#C00; border:1px solid #800; }\
+.VoteUpIcon, .VoteDownIcon { margin-top:2px; }\
+.DupVotes { margin-top: 10px; }\
+.DupVotes h4 { text-align:center; margin:3px 0; }\
+.DupVotes table { margin:0 auto; border:1px solid #CCC; }\
+.DupVotes td, .DupVotes th { padding:3px 6px; }\
+.DupVotes th { text-align:left; background-color:#DDD; }\
+.DupVotes tr:nth-child(even) { background-color:#FFF; }\
+.DupVotes tr:nth-child(odd) { background-color:#EFEFEF; }\
+.DupVotes tr:hover { background-color:#DDF; }\
+.DupVotes .IPAddress.highlight { background-color:#FFF !important; }\
 '
 );
 if (window.location.toString().indexOf("/Groups/Thread/")!=-1)
