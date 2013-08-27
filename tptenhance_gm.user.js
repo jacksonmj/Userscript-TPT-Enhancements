@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.18
+// @version		2.19
 // @require 	http://userscripts.org/scripts/source/100842.user.js
 // @grant 		none
 // @updateURL   https://userscripts.org/scripts/source/173466.meta.js
@@ -468,7 +468,7 @@ contentEval(function(){
 						var cell;
 						cell = $('<td><a></a></td>').addClass('Date').appendTo(tableRow);
 						var timeString = [('0'+d.Date.getHours()).slice(-2), ('0'+d.Date.getMinutes()).slice(-2), ('0'+d.Date.getSeconds()).slice(-2)].join(':');
-						cell.text([d.Date.getDate(), months[d.Date.getMonth()], d.Date.getFullYear(), timeString].join(' '));
+						cell.text([('0'+d.Date.getDate()).slice(-2), months[d.Date.getMonth()], d.Date.getFullYear(), timeString].join(' '));
 						cell = $('<td><a></a></td>').addClass('Username').appendTo(tableRow);
 						cell.children().first().attr('href', tptenhance.users.moderationUrlById(d.UserID)).text(d.Username);
 
@@ -538,21 +538,6 @@ contentEval(function(){
 						
 						cell = $('<td><a></a></td>').addClass('IPAddress').appendTo(tableRow);
 						cell.children().first().attr('href', tptenhance.IPMapUrl(d.SourceAddress)).text(d.SourceAddress);
-						if (iplist.length>1)
-						{
-							cell.on("mouseenter",function(){
-								var target = $(this).find("a").text();
-								$(this).parents("tbody").find("td.IPAddress").each(function(){
-									if ($(this).find("a").text() == target)
-										$(this).addClass("highlight");
-									else
-										$(this).removeClass("highlight");
-								});
-							});
-							cell.on("mouseleave",function(){
-								$(this).parents("tbody").find("td.IPAddress").removeClass("highlight");
-							});
-						}
 						if (typeof ipcolours[d.SourceAddress] != "undefined" && ipcolours[d.SourceAddress] != "")
 							cell.css('background-color', ipcolours[d.SourceAddress]);
 						cell = $('<td></td>').addClass('VoteType');
@@ -560,6 +545,36 @@ contentEval(function(){
 						else if (d.Vote==-1) cell.html('<i class="VoteDownIcon icon-chevron-down icon-white"></i>');
 						else cell.html('&nbsp;');
 						cell.appendTo(tableRow);
+
+						if (iplist.length>1)
+						{
+							/*tableRow.on("mouseenter",function(){
+								var target = $(this).find(".IPAddress a").text();
+								$(this).parents("tbody").find("tr").each(function(){
+									if ($(this).find(".IPAddress a").text() == target)
+										$(this).addClass("highlight");
+									else
+										$(this).removeClass("highlight");
+								});
+							});
+							tableRow.on("mouseleave",function(){
+								$(this).parents("tbody").find("tr").removeClass("highlight");
+							});*/
+							tableRow.on("dblclick", function(){
+								if ($(this).hasClass("highlight"))
+								{
+									$(this).parents("tbody").find("tr").removeClass("highlight");
+									return;
+								}
+								var target = $(this).find(".IPAddress a").text();
+								$(this).parents("tbody").find("tr").each(function(){
+									if ($(this).find(".IPAddress a").text() == target)
+										$(this).addClass("highlight");
+									else
+										$(this).removeClass("highlight");
+								});
+							});
+						}
 						dupVotesTblBody.append(tableRow);
 					});
 					$("#VoteGraph").append(dupVotesDiv);
@@ -735,15 +750,55 @@ contentEval(function(){
 			$("div.Tag .DelButton").attr('title', 'Disable');// A clearer tooltip
 			$("div.Tag .DelButton").on('click', tptenhance.tags.disableButtonClick);
 			// ajax for deleting comments
-			var clickFn = function(e){
+			var modPageRequest = false, modPageRequestNeeded = false;
+			var clickFn;
+			clickFn = function(e){
 				e.preventDefault();
+				if (tptenhance.commentDeleteWaiting>0) modPageRequestNeeded = true;
+				tptenhance.commentDeleteWaiting++;
 				var post = $(this).parents('.Post');
 				var info = $(tptenhance.deletingHtml);
 				$(this).parents('.Actions').replaceWith(info);
-				url = this.href.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(tptenhance.dummyUrl));
-				$.get(url, function(){
+				url = this.href;
+				if (modPageRequestNeeded) url = url.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(tptenhance.dummyUrl));
+				if (modPageRequest !== false) modPageRequest.abort();
+				modPageRequest = false;
+				$.get(url, function(data){
+					tptenhance.commentDeleteWaiting--;
 					post.css('color','#AAA');
-					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted.</strong> Refresh page to update list of recent comments</span></div>');
+					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong></span></div>');
+					if (tptenhance.commentDeleteWaiting==0)
+					{
+						if (modPageRequestNeeded)
+						{
+							if (modPageRequest !== false) modPageRequest.abort();
+							modPageRequest = $.get(window.location, function(data){
+								var comments = $(data).find(".MessageList");
+								if (comments.length)
+								{
+									post.parents(".MessageList").replaceWith(comments);
+									$(".Actions a").each(function(){
+										if (this.href.indexOf('DeleteComment=')!=-1)
+											$(this).click(clickFn);
+									});
+								}
+								modPageRequestNeeded = false;
+								modPageRequest = false;
+							}, "html");
+						}
+						else
+						{
+							var comments = $(data).find(".MessageList");
+							if (comments.length)
+							{
+								post.parents(".MessageList").replaceWith(comments);
+								$(".Actions a").each(function(){
+									if (this.href.indexOf('DeleteComment=')!=-1)
+										$(this).click(clickFn);
+								});
+							}
+						}
+					}
 				});
 			}
 			$(".Actions a").each(function(){
@@ -909,8 +964,10 @@ addCss('\
 .DupVotes th { text-align:left; background-color:#DDD; }\
 .DupVotes tr:nth-child(even) { background-color:#FFF; }\
 .DupVotes tr:nth-child(odd) { background-color:#EFEFEF; }\
-.DupVotes tr:hover { background-color:#DDF; }\
-.DupVotes .IPAddress.highlight { background-color:#FFF !important; }\
+.DupVotes tr:hover, .DupVotes tr.highlight:hover { background-color:#E0E0FF; }\
+.DupVotes tr.highlight .IPAddress { background-color:#FFF !important; }\
+.DupVotes tr.highlight { background-color:#C8C8FF; }\
+.DupVotes .Date { font-family:monospace; }\
 '
 );
 if (window.location.toString().indexOf("/Groups/Thread/")!=-1)
