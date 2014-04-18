@@ -1182,7 +1182,7 @@ contentEval(function(){
 						var newTop;
 						if(goBack){
 							$("ul.MessageList").prepend(data.Posts);
-							$("ul.MessageList").css("top", -$("ul.MessageList").height()+OLHeight+"px");
+							$("ul.MessageList").css("top", -OLHeight+"px");
 							newTop = 0;
 						} else {
 							$("ul.MessageList").append(data.Posts);
