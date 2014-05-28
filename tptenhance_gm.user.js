@@ -3,12 +3,33 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.25
-// @require 	http://userscripts.org/scripts/source/100842.user.js
+// @version		2.27
 // @grant 		none
-// @updateURL   https://userscripts.org/scripts/source/173466.meta.js
-// @downloadURL   https://userscripts.org/scripts/source/173466.user.js
+// @downloadURL   https://openuserjs.org/install/jacksonmj/httppowdertoythings.co.uktptenhance/Powder_Toy_enhancements.user.js
 // ==/UserScript==
+
+// contentEval, from http://userscripts.org/scripts/source/100842.user.js :
+function contentEval(source) {
+  // Check for function input.
+  if ('function' == typeof source) {
+    // Execute this function with no arguments, by adding parentheses.
+    // One set around the function, required for valid syntax, and a
+    // second empty set calls the surrounded function.
+    source = '(' + source + ')();'
+  }
+
+  // Create a script node holding this  source code.
+  var script = document.createElement('script');
+  script.setAttribute("type", "application/javascript");
+  script.textContent = source;
+
+  // Insert the script node into the page, so it will run, and immediately
+  // remove it to clean up.
+  document.body.appendChild(script);
+  document.body.removeChild(script);
+}
+
+
 
 // Fix silly way of checking whether facebook stuff is loaded
 // If facebook is blocked, then the javascript on powdertoy.co.uk errors and does not execute important stuff like callbacks for showing tag info popups
@@ -343,6 +364,12 @@ contentEval(function(){
 				msg.append($('<span></span>').text(text.slice(prevLastIndex)));
 			});
 		},
+		forums:{
+			threadUrl:function(id)
+			{
+				return "/Discussions/Thread/View.html?Thread="+encodeURIComponent(id);
+			}
+		},
 		reports:{
 			viewReportUrl:function(id)
 			{
@@ -387,7 +414,7 @@ contentEval(function(){
 					var reasonHtml = $(this);
 					reportMsgs.push({
 						UserAvatar:reasonHtml.find(".Meta .Author img").attr("src"),
-						UserID:reasonHtml.find(".Meta .Author a:last-child").attr("href").match(/ID=[0-9]+/)[0].split("=")[0],
+						UserID:reasonHtml.find(".Meta .Author a:last-child").attr("href").match(/ID=[0-9]+/)[0].split("=")[1],
 						UserName:reasonHtml.find(".Meta .Author a:last-child").text().trim(),
 						ReportDate:reasonHtml.find(".Meta .Date").text().trim(), 
 						Message:reasonHtml.find(".Message").text().trim()
@@ -436,6 +463,10 @@ contentEval(function(){
 			infoJsonUrlPTT:function(id)
 			{
 				return "http://powdertoythings.co.uk/Powder/Saves/View.json?ID="+encodeURIComponent(id);
+			},
+			infoDetailedJsonUrlPTT:function(id)
+			{
+				return "http://powdertoythings.co.uk/Powder/Saves/ViewDetailed.json?ID="+encodeURIComponent(id);
 			},
 			voteMapUrl:function(id)
 			{
@@ -1029,6 +1060,10 @@ contentEval(function(){
 					var reportsTab = $('<li class="item"><a href="">Reports</a></li>').appendTo(tabs);
 					//var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO. Table showing all tags and users who placed them, with remove+disable buttons for each tag, and a remove all tags button. 
 					var bumpsTab = $('<li class="item"><a href="">Bumps</a></li>').appendTo(tabs);
+					var searchesTab = $('<li class="item"><a href="">Search similar</a></li>').appendTo(tabs);
+					var signsTab = $('<li class="item"><a href="">Signs</a></li>').appendTo(tabs);
+					
+					
 
 					var tabSwitch = function(newTabLink){
 						tabs.find("li.active").removeClass("active");
@@ -1096,6 +1131,106 @@ contentEval(function(){
 							}
 							tptenhance.saveDetailsTabContent.append(bumpList);
 						}, "json");
+						e.preventDefault();
+					});
+					signsTab.find("a").on("click", function(e){
+						tabSwitch(this);
+						$.get(tptenhance.saves.infoDetailedJsonUrlPTT(currentSaveID), function(data){
+							console.log(data);
+							if (typeof data.Error!="undefined")
+							{
+								tptenhance.saveDetailsTabContent.append($("<div></div>").addClass("alert alert-error").text(data.Error));
+							}
+							else
+							{
+								var container = $('<div style="text-align:center;">(data may be up to 5 minutes old)<br><br></div>');
+								var signsTbl = $('<table cellspacing="0" cellpadding="0" style="margin:0 auto;" class="SignsTbl"><thead><tr><th>Position</th><th>Displayed text</th><th>Sign type</th></tr></thead><tbody></tbody></table>')
+								var signsTblBody = signsTbl.find('tbody');
+								data.Signs.sort(function(a,b){return a.PlacementY*10000-b.PlacementY*10000+a.PlacementX-b.PlacementX});
+								if (data.Signs.length)
+								{
+									data.Signs.forEach(function(s){
+										var row = $('<tr></tr>');
+										var count = 0;
+										for (var i=0; i<data.Signs.length; ++i)
+										{
+											if (data.Signs[i].PlacementX==s.PlacementX && data.Signs[i].PlacementY==s.PlacementY && data.Signs[i].RawText==s.RawText)
+												++count;
+										}
+										if (count>1)
+											row.addClass("DupSign");
+										$('<td></td>').text(s.PlacementX+','+s.PlacementY).appendTo(row);
+										if (s.Type=="Save link" || s.Type=="Thread link")
+										{
+											/*var cell = $('<td></td>').appendTo(row);
+											$('<div><strong>Raw:</strong><span></span>').appendTo(cell).find('span').text(s.RawText);
+											$('<div><strong>Displayed:</strong><span></span>').appendTo(cell).find('span').text(s.DisplayText);*/
+											if (s.Type=="Save link")
+											{
+												var url = tptenhance.saves.viewUrl(s.LinkID);
+												var cell = $('<td></td>').appendTo(row);
+												$('<a></a>').text(s.DisplayText).attr('href', url).appendTo(cell);
+
+												var cell = $('<td></td>').text(s.Type+': ').appendTo(row);
+												$('<a></a>').text(s.LinkID).attr('href', url).appendTo(cell);
+											}
+											else if (s.Type=="Thread link")
+											{
+												var url = tptenhance.forums.threadUrl(s.LinkID);
+												var cell = $('<td></td>').appendTo(row);
+												$('<a></a>').text(s.DisplayText).attr('href', url).appendTo(cell);
+
+												var cell = $('<td></td>').text(s.Type+': ').appendTo(row);
+												$('<a></a>').text(s.LinkID).attr('href', url).appendTo(cell);
+											}
+										}
+										else if (s.Type=="Spark sign")
+										{
+											$('<td></td>').text(s.DisplayText).appendTo(row);
+											$('<td></td>').text(s.Type).appendTo(row);
+										}
+										else
+										{
+											//$('<td></td>').text(s.RawText).appendTo(row);
+											$('<td></td>').text(s.DisplayText).appendTo(row);
+											$('<td></td>').text(s.Type).appendTo(row);
+										}
+										row.appendTo(signsTblBody);
+									});
+									container.append(signsTbl);
+								}
+								else
+								{
+									container.text('No signs found (data may be up to 5 minutes old)');
+								}
+								tptenhance.saveDetailsTabContent.append(container);
+							}
+						}, "json");
+						e.preventDefault();
+					});
+					
+					searchesTab.find("a").on("click", function(e){
+						tabSwitch(this);
+						var container = $('<div><strong>Search for similar saves by:</strong><br></div>').css({"text-align":"center"});
+						$('<a></a>')
+							.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:title "+$(".Title").attr('title').trim()))
+							.text("Title")
+							.append('<br>')
+							.appendTo(container);
+						$('<a></a>')
+							.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("search:similartitle "+$(".Title").attr('title').trim()))
+							.text("Similar title")
+							.append('<br>')
+							.appendTo(container);
+						if ($(".SaveDescription").text().trim()!="No Description provided.")
+						{
+							$('<a></a>')
+								.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:desc "+$(".SaveDescription").text().trim()))
+								.text("Description")
+								.append('<br>')
+								.appendTo(container);
+						}
+						tptenhance.saveDetailsTabContent.append(container);
 						e.preventDefault();
 					});
 
@@ -1234,6 +1369,38 @@ contentEval(function(){
 				if (txt=="Resign") $(this).addClass('btn-danger');
 			});
 			$('.GroupInfo').append($('.GroupOptions'));
+			$('.SubmitF input[type="submit"]').addClass('btn btn-primary');
+			if (window.location.toString().indexOf("/Groups/Page/Register.html")!=-1) {
+				$('form input[type="submit"]').addClass('btn btn-primary').css('margin', '10px 0');
+			}
+			if (window.location.toString().indexOf("/Groups/Admin/Members.html")!=-1) {
+				$('.MemberActions a.btn').each(function(){
+					// Add icons and colours to buttons
+					$(this).addClass("btn-mini");
+					if ($(this).text()=="Accept")
+					{
+						$(this).addClass("btn-success").prepend('<i class="icon-ok icon-white"></i> ');
+					}
+					if ($(this).text()=="Reject")
+					{
+						$(this).addClass("btn-danger").prepend('<i class="icon-remove icon-white"></i> ');
+					}
+					if ($(this).text()=="Remove")
+					{
+						$(this).addClass("btn-danger").html('<i class="icon-remove icon-white"></i>');
+					}
+				});
+				$('.NewMembers a.MemberName').each(function(){
+					// User profile link is broken for pending registrations, uses Name=1234 instead of either Name=JohnSmith or ID=1234
+					$(this).attr('href', $(this).attr('href').replace(/\?Name=/, "?ID="));
+				});
+				// Remove join time for pending registrations, since this seems to always be the current time. 
+				$('.NewMembers .MemberJoined').remove();
+			}
+			if (window.location.toString().indexOf("/Groups/Admin/MemberRemove.html")!=-1) {
+				// Prettier removal confirmation button
+				$('.FullForm input[type="submit"]').addClass('btn btn-danger').text('Remove');
+			}
 		});
 	}
 	if (window.location.toString().indexOf("/Groups/Thread/")!=-1)
@@ -1417,6 +1584,15 @@ addCss('\
 .DupVotes tr.highlight .IPAddress { background-color:#FFF !important; }\
 .DupVotes tr.highlight { background-color:#C8C8FF; }\
 .DupVotes .Date { font-family:monospace; }\
+.SignsTbl { margin:0 auto; border:1px solid #CCC; }\
+.SignsTbl td, .SignsTbl th { padding:3px 6px; border:1px solid #CCC}\
+.SignsTbl th { text-align:left; background-color:#DDD; }\
+.SignsTbl th:nth-child(2) { min-width:200px; }\
+.SignsTbl td:nth-child(2), .SignsTbl td:nth-child(3) { text-align:left; }\
+.SignsTbl tr:nth-child(even) { background-color:#FFF; }\
+.SignsTbl tr:nth-child(odd) { background-color:#F9F9F9; }\
+.SignsTbl tr:hover, .DupVotes tr.highlight:hover { background-color:#E0E0FF; }\
+.SignsTbl tr.DupSign td:nth-child(1) { color:#C00; font-weight:bold; }\
 .Post { word-wrap: break-word; }\
 .savegame { width:153px; }\
 .savegame .caption a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\
@@ -1445,6 +1621,8 @@ if (window.location.toString().indexOf("/Groups/")!=-1)
 ul.MessageList li.Post div.Meta span.Actions2 { float:right; }\
 ul.MessageList li.Post div.Meta span.Actions2 a { visibility:hidden; }\
 ul.MessageList li.Post:hover div.Meta span.Actions2 a { visibility:visible; }\
+.CurrentMembers .MemberActions select[name="Elevation"] { width:100px; }\
+.MemberColumn { width:360px; }\
 \
 ');
 }
