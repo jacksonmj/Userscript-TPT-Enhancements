@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.27
+// @version		2.28
 // @grant 		none
 // @downloadURL   https://openuserjs.org/install/jacksonmj/httppowdertoythings.co.uktptenhance/Powder_Toy_enhancements.user.js
 // ==/UserScript==
@@ -1084,6 +1084,7 @@ contentEval(function(){
 					reportsTab.find("a").on("click", function(e){
 						tabSwitch(this);
 						$.get(tptenhance.reports.viewReportUrl(currentSaveID), function(html){
+							tptenhance.saveDetailsTabContent.empty();
 							var reports = tptenhance.reports.parseViewReport(html);
 							var msgList = $('<ul class="MessageList"></ul>');
 							if (reports.length)
@@ -1110,6 +1111,7 @@ contentEval(function(){
 					bumpsTab.find("a").on("click", function(e){
 						tabSwitch(this);
 						$.get(tptenhance.saves.infoJsonUrlPTT(currentSaveID), function(data){
+							tptenhance.saveDetailsTabContent.empty();
 							var bumpList = $('<div style="text-align:center;"></div>');
 							data.BumpTimes.sort(function(a,b){return b-a});
 							if (data.BumpTimes.length)
@@ -1136,7 +1138,7 @@ contentEval(function(){
 					signsTab.find("a").on("click", function(e){
 						tabSwitch(this);
 						$.get(tptenhance.saves.infoDetailedJsonUrlPTT(currentSaveID), function(data){
-							console.log(data);
+							tptenhance.saveDetailsTabContent.empty();
 							if (typeof data.Error!="undefined")
 							{
 								tptenhance.saveDetailsTabContent.append($("<div></div>").addClass("alert alert-error").text(data.Error));
@@ -1162,9 +1164,6 @@ contentEval(function(){
 										$('<td></td>').text(s.PlacementX+','+s.PlacementY).appendTo(row);
 										if (s.Type=="Save link" || s.Type=="Thread link")
 										{
-											/*var cell = $('<td></td>').appendTo(row);
-											$('<div><strong>Raw:</strong><span></span>').appendTo(cell).find('span').text(s.RawText);
-											$('<div><strong>Displayed:</strong><span></span>').appendTo(cell).find('span').text(s.DisplayText);*/
 											if (s.Type=="Save link")
 											{
 												var url = tptenhance.saves.viewUrl(s.LinkID);
@@ -1191,8 +1190,7 @@ contentEval(function(){
 										}
 										else
 										{
-											//$('<td></td>').text(s.RawText).appendTo(row);
-											$('<td></td>').text(s.DisplayText).appendTo(row);
+											$('<td></td>').text(s.RawText).appendTo(row);
 											$('<td></td>').text(s.Type).appendTo(row);
 										}
 										row.appendTo(signsTblBody);
@@ -1243,6 +1241,7 @@ contentEval(function(){
 					tptenhance.saveDetailsTabs = tabs;
 					tptenhance.saveDetailsTabContent = $('<div></div>').appendTo(newDetailsPane);
 				}
+				$(".AddComment .OtherF textarea").attr("maxlength", 500);
 				tptenhance.attachSaveCommentHandlers();
 			},1);
 			$(".SaveDetails .Warning").addClass("alert alert-error").css("margin-bottom", "5px");
