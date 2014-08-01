@@ -3,9 +3,9 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.28
-// @grant 		none
-// @downloadURL   https://openuserjs.org/install/jacksonmj/httppowdertoythings.co.uktptenhance/Powder_Toy_enhancements.user.js
+// @version		2.29
+// @grant       none
+// @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
 
 // contentEval, from http://userscripts.org/scripts/source/100842.user.js :
@@ -1481,6 +1481,17 @@ contentEval(function(){
 					$(this).attr('href', "/Groups/Thread/View.html?Post="+encodeURIComponent(matches[1])+"&Group="+encodeURIComponent(groupId));
 				}
 			});
+			var threadPageNum = $(".Pagination .active a").first().attr("href").match(/PageNum=([0-9]+)/)[1];
+			var threadId = $(".Pagination .active a").first().attr("href").match(/Thread=([0-9]+)/)[1];
+			$(".Post .Permalink a").each(function(){
+				var postId = $(this).attr("href").match(/Post=([0-9]+)/)[1];
+				$(this).attr("href", "/Groups/Thread/View.html?"
+					+"Thread="+encodeURIComponent(threadId)
+					+"&Group="+encodeURIComponent(groupId)
+					+"&PageNum="+encodeURIComponent(threadPageNum)
+					+"#Message="+encodeURIComponent(postId)
+				);
+			});
 		});
 	}
 	if (window.location.toString().indexOf("/Reports/View.html")!=-1)
@@ -1553,6 +1564,9 @@ contentEval(function(){
 			}
 		});
 	}
+	// Correct repository username for github button, so that number of stars displays correctly
+	$(".social-github iframe").attr("src", $(".social-github iframe").attr("src").replace("FacialTurd", "simtr"));
+	
 	}
 });
 
