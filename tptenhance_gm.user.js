@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.29
+// @version		2.30
 // @grant       none
 // @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
@@ -31,12 +31,14 @@ function contentEval(source) {
 
 
 
-// Fix silly way of checking whether facebook stuff is loaded
+// Fix silly way of checking whether facebook stuff is loaded (Browse.View.js:3, "if(FB)")
 // If facebook is blocked, then the javascript on powdertoy.co.uk errors and does not execute important stuff like callbacks for showing tag info popups
 contentEval('if (typeof window.FB == "undefined") window.FB = false;');
 
+delete $;
+
 contentEval(function(){
-	if (typeof $ != "undefined")
+	if (typeof $ != "undefined") // check jQuery has loaded
 	{
 	window.tptenhance = {
 		sessionKey:"",
@@ -683,18 +685,6 @@ contentEval(function(){
 
 						if (iplist.length>1)
 						{
-							/*tableRow.on("mouseenter",function(){
-								var target = $(this).find(".IPAddress a").text();
-								$(this).parents("tbody").find("tr").each(function(){
-									if ($(this).find(".IPAddress a").text() == target)
-										$(this).addClass("highlight");
-									else
-										$(this).removeClass("highlight");
-								});
-							});
-							tableRow.on("mouseleave",function(){
-								$(this).parents("tbody").find("tr").removeClass("highlight");
-							});*/
 							tableRow.on("dblclick", function(){
 								if ($(this).hasClass("highlight"))
 								{
@@ -1035,6 +1025,24 @@ contentEval(function(){
 					}
 					elem.find("span").text(txt);
 				}, "json");
+				if (tptenhance.isMod())
+				{
+					var username = $(".Pageheader .SubmenuTitle").text();
+					$(".MoreInfoForum a").each(function(){
+						if ($(this).text().indexOf("replies by")>-1)
+						{
+							var elem = $('<div class="UserInfoRow"><a></a></div>');
+							elem.find("a").attr("href", "/Discussions/Search/PostsByAuthor.html?Search_Query="+encodeURIComponent(username)).text("Find all posts by "+username+" (old version)");
+							elem.insertAfter($(this).closest(".UserInfoRow"));
+						}
+						if ($(this).text().indexOf("topics by")>-1)
+						{
+							var elem = $('<div class="UserInfoRow"><a></a></div>');
+							elem.find("a").attr("href", "/Discussions/Search/TopicsByAuthor.html?Search_Query="+encodeURIComponent(username)).text("Find all topics by "+username+" (old version)");
+							elem.insertAfter($(this).closest(".UserInfoRow"));
+						}
+					});
+				}
 			}
 		});
 	}
@@ -1049,14 +1057,9 @@ contentEval(function(){
 					$("span.Tag").on('click', function(){
 						tptenhance.tagTooltip($(this), $(this).text(), currentSaveID);
 					});
-					/*var newVoteGraph = $('<div id="VoteGraph"></div>');
-					newVoteGraph.append($("#VoteGraph").children());
-					newVoteGraph.find(".btn").remove();
-					newVoteGraph.hide();*/
 
 					var tabs = $('<ul class="nav nav-pills"></ul>');
 					tabs.css({"display": "inline-block", "margin-bottom":"0"});
-					//var votesTab = $('<li class="item"><a href="">Votes</a></li>').appendTo(tabs);
 					var reportsTab = $('<li class="item"><a href="">Reports</a></li>').appendTo(tabs);
 					//var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO. Table showing all tags and users who placed them, with remove+disable buttons for each tag, and a remove all tags button. 
 					var bumpsTab = $('<li class="item"><a href="">Bumps</a></li>').appendTo(tabs);
@@ -1172,6 +1175,8 @@ contentEval(function(){
 
 												var cell = $('<td></td>').text(s.Type+': ').appendTo(row);
 												$('<a></a>').text(s.LinkID).attr('href', url).appendTo(cell);
+												var thumb = $('<img>').attr('src', tptenhance.saves.smallImgUrl(s.LinkID));
+												$('<a class="SignLinkSaveThumb"></a>').append(thumb).attr('href', url).appendTo(cell);
 											}
 											else if (s.Type=="Thread link")
 											{
@@ -1263,6 +1268,7 @@ contentEval(function(){
 	if (window.location.toString().indexOf("/Discussions/Thread/View.html")!=-1)
 	{
 		// Extend LoadForumBlocks to add a click callback to the Unhide post buttons, to fix the site redirecting to the first page of the thread instead of the page with the post when a post is unhidden
+		// Also scroll to top/bottom of page when changing to next/previous page in a thread
 		tptenhance.oldLoadForumBlocks = window.LoadForumBlocks;
 		window.LoadForumBlocks = tptenhance.LoadForumBlocks;
 		$(document).ready(function(){
@@ -1564,8 +1570,22 @@ contentEval(function(){
 			}
 		});
 	}
+	if (tptenhance.isMod() && (window.location.toString().indexOf("/User.html")!=-1 || window.location.toString().indexOf("/User/Saves.html")!=-1 || window.location.toString().indexOf("/User/Moderation.html")!=-1))
+	{
+		$(document).ready(function(){
+			var usernameElem = $(".SubmenuTitle");
+			if (usernameElem.length || 1)
+			{
+				var tabElem = $('<li class=\"item\"><a>Published</a></li>');
+				tabElem.find("a").attr("href", "/Browse.html?Search_Query=user:"+encodeURIComponent(usernameElem.text()));
+				tabElem.insertAfter($(".Pageheader .nav li:nth-child(2)"));
+			}
+		});
+	}
+	
 	// Correct repository username for github button, so that number of stars displays correctly
-	$(".social-github iframe").attr("src", $(".social-github iframe").attr("src").replace("FacialTurd", "simtr"));
+	if ($(".social-github iframe").length)
+		$(".social-github iframe").attr("src", $(".social-github iframe").attr("src").replace("FacialTurd", "simtr"));
 	
 	}
 });
@@ -1606,12 +1626,15 @@ addCss('\
 .SignsTbl tr:nth-child(odd) { background-color:#F9F9F9; }\
 .SignsTbl tr:hover, .DupVotes tr.highlight:hover { background-color:#E0E0FF; }\
 .SignsTbl tr.DupSign td:nth-child(1) { color:#C00; font-weight:bold; }\
+.SignLinkSaveThumb { display:block; }\
+.SignLinkSaveThumb img { clear:left; width:102px; height:64px; }\
 .Post { word-wrap: break-word; }\
 .savegame { width:153px; }\
 .savegame .caption a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\
 .TagInfo { clear:right; }\
 .TagInfo .label { margin-bottom:1px; }\
 .SaveDetails ul.MessageList li.Post { border-top:1px solid #DCDCDC; border-bottom:0 none; }\
+.new-topic-button .btn { white-space:nowrap; }\
 ');
 if (window.location.toString().indexOf("/Groups/")!=-1)
 {
