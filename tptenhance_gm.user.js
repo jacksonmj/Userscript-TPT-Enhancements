@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.31
+// @version		2.32
 // @grant       none
 // @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
@@ -909,7 +909,7 @@ contentEval(function(){
 					var tagRemoveTimeout;
 					var currentTag, currentTagText;
 					var startTag, fetchedTag, startSaveTag, fetchedSaveTag;
-					var interval = 1000;
+					var interval = 2000;
 					var currentUserName = $('.SubmenuTitle').text();
 					// TODO: error handling for $.get ?
 					startTag = function(){
@@ -929,7 +929,7 @@ contentEval(function(){
 					fetchedTag = function(data){
 						tagSaves = [];
 						tagSavesAllUsersCount = 0;
-						$(data).filter('div.TagInfo').each(function(){
+						$(data).filter('.TagInfo').each(function(){
 							var saveId = $($(this).find("a")[0]).text();
 							var userName = $($(this).find("a")[1]).text();
 							tagSavesAllUsersCount++;
@@ -956,7 +956,6 @@ contentEval(function(){
 						progressSub.find(".bar").css('width', ((tagSavesCount-tagSaves.length-1)/tagSavesCount*100)+'%');
 						progressSub.find(".progresstitle").text("Removing tag '"+currentTagText+"' from save "+saveId+" ("+(tagSavesCount-tagSaves.length)+"/"+tagSavesCount+")");
 						$.get(tptenhance.removeTagUrl(currentTagText,saveId), fetchedSaveTag);
-						tagRemoveTimeout = setTimeout(fetchedSaveTag, interval);
 					}
 					fetchedSaveTag = function(){
 						tagRemoveTimeout = setTimeout(startSaveTag, interval);
@@ -1133,7 +1132,7 @@ contentEval(function(){
 					var tabs = $('<ul class="nav nav-pills"></ul>');
 					tabs.css({"display": "inline-block", "margin-bottom":"0"});
 					var reportsTab = $('<li class="item"><a href="">Reports</a></li>').appendTo(tabs);
-					var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO. Table showing all tags and users who placed them, with remove+disable buttons for each tag, and a remove all tags button. 
+					var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO: remove all tags button, click on tags in table to show other uses, remove all instances of tag button
 					var bumpsTab = $('<li class="item"><a href="">Bumps</a></li>').appendTo(tabs);
 					var searchesTab = $('<li class="item"><a href="">Search similar</a></li>').appendTo(tabs);
 					var signsTab = $('<li class="item"><a href="">Signs</a></li>').appendTo(tabs);
