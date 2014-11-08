@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.30
+// @version		2.31
 // @grant       none
 // @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
@@ -34,8 +34,6 @@ function contentEval(source) {
 // Fix silly way of checking whether facebook stuff is loaded (Browse.View.js:3, "if(FB)")
 // If facebook is blocked, then the javascript on powdertoy.co.uk errors and does not execute important stuff like callbacks for showing tag info popups
 contentEval('if (typeof window.FB == "undefined") window.FB = false;');
-
-delete $;
 
 contentEval(function(){
 	if (typeof $ != "undefined") // check jQuery has loaded
@@ -892,6 +890,80 @@ contentEval(function(){
 	if (window.location.toString().indexOf("/User/Moderation.html")!=-1)
 	{
 		$(document).ready(function(){setTimeout(function(){
+			if ($("div.Tag").length)
+			{
+				var removeAll = $("<a class='pull-right btn btn-mini btn-danger'></a>");
+				removeAll.text("Remove all tags by this user");
+				removeAll.insertBefore($("div.Tag").prev(".page-header"));
+				removeAll.click(function()
+				{
+					if (!confirm("Are you sure you want to remove all tags by this user?"))
+						return;
+					var progress = $('<div style="width:40%;margin-right:5%" class="pull-left"><div class="progresstitle">Removing tags</div><div class="progress"><div class="bar" role="progressbar" style="width: 0%;"></div></div></div>');
+					var progressSub = $('<div style="width:40%;" class="pull-left"><div class="progresstitle">&nbsp;</div><div class="progress"><div class="bar" role="progressbar" style="width: 0%; transition:width 0s;"></div></div>');
+					$("div.Tag").first().before(progress).before(progressSub).before('<div class="Clear"></div>');
+					$(this).remove();
+					var tags = $("div.Tag").toArray();
+					var tagCount = tags.length;
+					var tagSaves, tagSavesCount, tagSavesAllUsersCount=99;
+					var tagRemoveTimeout;
+					var currentTag, currentTagText;
+					var startTag, fetchedTag, startSaveTag, fetchedSaveTag;
+					var interval = 1000;
+					var currentUserName = $('.SubmenuTitle').text();
+					// TODO: error handling for $.get ?
+					startTag = function(){
+						if (!tags.length){
+							progress.next(".Clear").remove();
+							progressSub.remove();
+							progress.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>All tags by this user removed</strong></span></div>');
+							return;
+						}
+						currentTag = tags.shift();
+						currentTagText = $(currentTag).find(".TagText").text();
+						progress.find(".bar").css('width', ((tagCount-tags.length-1)/tagCount*100)+'%');
+						progress.find(".progresstitle").text("Removing tag '"+currentTagText+"' ("+(tagCount-tags.length)+"/"+tagCount+")");
+						var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(currentTagText);
+						$.get(getLocation, fetchedTag, "html");
+					}
+					fetchedTag = function(data){
+						tagSaves = [];
+						tagSavesAllUsersCount = 0;
+						$(data).filter('div.TagInfo').each(function(){
+							var saveId = $($(this).find("a")[0]).text();
+							var userName = $($(this).find("a")[1]).text();
+							tagSavesAllUsersCount++;
+							if (userName==currentUserName)
+								tagSaves.push(saveId);
+						});
+						tagSavesCount = tagSaves.length;
+						progressSub.find(".bar").css('width', '0%');
+						progressSub.find(".progresstitle").text("Fetching save list for tag '"+currentTagText+"'");
+						tagRemoveTimeout = setTimeout(startSaveTag, interval);
+					}
+					startSaveTag = function(){
+						if (!tagSaves.length){
+							progressSub.find(".bar").css('width', '100%');
+							progressSub.find(".progresstitle").text("Removed tag '"+currentTagText+"'");
+							if (tagSavesAllUsersCount!=tagSavesCount)
+								$(currentTag).addClass("tag-removedcurrent");
+							else
+								$(currentTag).addClass("tag-removedall");
+							startTag();
+							return;
+						}
+						var saveId = tagSaves.shift();
+						progressSub.find(".bar").css('width', ((tagSavesCount-tagSaves.length-1)/tagSavesCount*100)+'%');
+						progressSub.find(".progresstitle").text("Removing tag '"+currentTagText+"' from save "+saveId+" ("+(tagSavesCount-tagSaves.length)+"/"+tagSavesCount+")");
+						$.get(tptenhance.removeTagUrl(currentTagText,saveId), fetchedSaveTag);
+						tagRemoveTimeout = setTimeout(fetchedSaveTag, interval);
+					}
+					fetchedSaveTag = function(){
+						tagRemoveTimeout = setTimeout(startSaveTag, interval);
+					}
+					startTag();
+				});
+			}
 			$(".BanHistory ul").each(function(){
 				$(this).html($(this).html().replace(/Permenantly/, "Permanently"));
 			});
@@ -1061,14 +1133,20 @@ contentEval(function(){
 					var tabs = $('<ul class="nav nav-pills"></ul>');
 					tabs.css({"display": "inline-block", "margin-bottom":"0"});
 					var reportsTab = $('<li class="item"><a href="">Reports</a></li>').appendTo(tabs);
-					//var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO. Table showing all tags and users who placed them, with remove+disable buttons for each tag, and a remove all tags button. 
+					var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO. Table showing all tags and users who placed them, with remove+disable buttons for each tag, and a remove all tags button. 
 					var bumpsTab = $('<li class="item"><a href="">Bumps</a></li>').appendTo(tabs);
 					var searchesTab = $('<li class="item"><a href="">Search similar</a></li>').appendTo(tabs);
 					var signsTab = $('<li class="item"><a href="">Signs</a></li>').appendTo(tabs);
-					
-					
+
+					var tagsTable = false;
+					var currentTabLink = false;
 
 					var tabSwitch = function(newTabLink){
+						if (currentTabLink==(tagsTab.find("a")))
+						{
+							tptenhance.saveDetailsTabContent.find("table").detach();
+						}
+						currentTabLink = $(newTabLink).find("a");
 						tabs.find("li.active").removeClass("active");
 						$(newTabLink).parent().addClass("active");
 						//$("#VoteGraph").hide();
@@ -1109,6 +1187,67 @@ contentEval(function(){
 							}
 							reportsTab.find("a").text("Reports ("+reports.length+")");
 						}, "html");
+						e.preventDefault();
+					});
+					tagsTab.find("a").on("click", function(e){
+						tabSwitch(this);
+						tptenhance.saveDetailsTabContent.empty();
+						if (tagsTable==false)
+						{
+							var actionClickFunc = function(e){
+								e.preventDefault();
+								var url = this.href;
+								var that = $(this);
+								var pendingIndicator;
+								if (that.text()=="Disable")
+									pendingIndicator = $('<span><span class="label label-info" title="Disabling..."><i class="icon-refresh icon-white"></i></span></span>');
+								else
+									pendingIndicator = $('<span><span class="label label-info" title="Removing..."><i class="icon-refresh icon-white"></i></span></span>');
+								that.replaceWith(pendingIndicator);
+								$.get(url,function(){
+									pendingIndicator.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white"></i> <strong>Done</strong></span></span></span>');
+								});
+							};
+							tagsTable = $('<table cellspacing="0" cellpadding="0" class="TagsTable"><thead><tr><th>Tag</th><th>Username</th><th>&nbsp;</th></tr></thead><tbody></tbody></table>');
+							var pendingTags = [];
+							var pendingTagsFetchTimeout = false;
+							var pendingTagStart, pendingTagFetched;
+							var currentFetchTag = false;
+							pendingTagStart = function()
+							{
+								if (!pendingTags.length)
+									return;
+								currentFetchTag = pendingTags.shift();
+								var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(currentFetchTag.text)+"&SaveID="+encodeURIComponent(currentSaveID);
+								$.get(getLocation, pendingTagFetched, "html");
+							}
+							pendingTagFetched = function(data)
+							{
+								currentFetchTag.userCell.empty();
+								currentFetchTag.userCell.append($(data).filter("div.TagInfo").find("a").first());
+								pendingTagsFetchTimeout = setTimeout(pendingTagStart, 500);
+							}
+							var tagsTableBody = tagsTable.find("tbody");
+							$(".SaveTags .Tag").each(function(){
+								var tableRow = $('<tr></tr>');
+								var tagText = $(this).text();
+								var tagTextCell = $('<td></td>').text(tagText).appendTo(tableRow);
+								var usernameCell = $('<td>Loading...</td>').appendTo(tableRow);
+								var actionsCell = $('<td class="TagActions"></td>').appendTo(tableRow);
+								$('<a title="Remove tag from this save">Remove</a>')
+									.attr('href',tptenhance.removeTagUrl(tagText,currentSaveID))
+									.on('click', actionClickFunc)
+									.appendTo(actionsCell);
+								$('<a title="Disable tag">Disable</a>')
+									.attr('href',tptenhance.disableTagUrl(tagText)+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl))
+									.on('click', actionClickFunc)
+									.appendTo(actionsCell);
+								tagsTableBody.append(tableRow);
+								pendingTags.push({row:tableRow, userCell:usernameCell, text:tagText});
+							});
+							pendingTagStart();
+						}
+						tptenhance.saveDetailsTabContent.append(tagsTable);
 						e.preventDefault();
 					});
 					bumpsTab.find("a").on("click", function(e){
@@ -1635,6 +1774,15 @@ addCss('\
 .TagInfo .label { margin-bottom:1px; }\
 .SaveDetails ul.MessageList li.Post { border-top:1px solid #DCDCDC; border-bottom:0 none; }\
 .new-topic-button .btn { white-space:nowrap; }\
+.tag-removedcurrent { text-decoration: line-through; background-color:#ffd; }\
+.tag-removedall { text-decoration: line-through; background-color:#fed; }\
+.progresstitle { font-size:10px; margin-bottom:4px; }\
+.TagsTable .TagActions a, .TagsTable .TagActions > span { margin:0 5px; min-width:50px; display:inline-block; text-align:center; }\
+.TagsTable { margin:0 auto; border:1px solid #CCC; }\
+.TagsTable td, .TagsTable th { padding:3px 6px; border:1px solid #CCC}\
+.TagsTable th { text-align:left; background-color:#DDD; }\
+.TagsTable td:nth-child(1) { min-width:100px; }\
+.TagsTable td:nth-child(2) { min-width:100px; }\
 ');
 if (window.location.toString().indexOf("/Groups/")!=-1)
 {
