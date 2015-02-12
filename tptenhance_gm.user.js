@@ -3,28 +3,19 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.32
+// @version		2.34
 // @grant       none
 // @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
 
 // contentEval, from http://userscripts.org/scripts/source/100842.user.js :
 function contentEval(source) {
-  // Check for function input.
   if ('function' == typeof source) {
-    // Execute this function with no arguments, by adding parentheses.
-    // One set around the function, required for valid syntax, and a
-    // second empty set calls the surrounded function.
     source = '(' + source + ')();'
   }
-
-  // Create a script node holding this  source code.
   var script = document.createElement('script');
   script.setAttribute("type", "application/javascript");
   script.textContent = source;
-
-  // Insert the script node into the page, so it will run, and immediately
-  // remove it to clean up.
   document.body.appendChild(script);
   document.body.removeChild(script);
 }
@@ -36,176 +27,61 @@ function contentEval(source) {
 contentEval('if (typeof window.FB == "undefined") window.FB = false;');
 
 contentEval(function(){
-	if (typeof $ != "undefined") // check jQuery has loaded
-	{
+	if (typeof $ == "undefined") // check jQuery has loaded
+		return;
+
 	window.tptenhance = {
-		sessionKey:"",
+
+		// used by several functions to replace clicked "Delete" links to show that a request is in progress / finished
 		deletingHtml:'<div class="pull-right label label-info"><i class="icon-refresh icon-white"></i> <strong>Deleting...</strong></div>',
-		dummyUrl:"/Themes/Next/Javascript/Browse.View.js",// a random page to use for redirects, which will hopefully load faster than the default redirect (e.g. to a user moderation page) in ajax requests
+		deletedHtml:'<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong></div>',
+
+		// a random page to use for redirects, which will hopefully load faster than the default redirect (e.g. to a user moderation page) in ajax requests
+		dummyUrl:"/Themes/Next/Javascript/Browse.View.js",
+
 		monthNamesShort:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+
+		// Return session key (the thing used as CSRF protection) - cached in tptenhance.sessionKey
 		getSessionKey:function()
 		{
-			if (tptenhance.sessionKey=="")
-			{
-				$('.main-menu').find('a').each(function(){
-					var url = this.href;
-					var matches = url.match(/Logout.html\?Key=[A-Za-z0-9]+/)
-					if (matches)
-					{
-						// Logout link found, extract key
-						tptenhance.sessionKey = matches[0].split("=")[1];
-					}
-				});
-			}
+			if (tptenhance.sessionKey!=="")
+				return tptenhance.sessionKey;
+
+			$('.main-menu').find('a').each(function(){
+				var url = this.href;
+				var matches = url.match(/Logout.html\?Key=[A-Za-z0-9]+/)
+				if (matches)
+				{
+					// Logout link found, extract key
+					tptenhance.sessionKey = matches[0].split("=")[1];
+				}
+			});
 			return tptenhance.sessionKey;
 		},
+		sessionKey:"",
+
+		// Get the username to which the page refers
+		// E.g. for moderation page, username of person being moderated.
+		getPageUsername:function()
+		{
+			if (window.location.pathname.toString().indexOf("/User/Moderation.html")!==-1)
+				return $('.SubmenuTitle').text();
+			return null;
+		},
+
+		// Returns bool indicating whether the user is logged in as a moderator
 		isMod:function()
 		{
 			if (typeof tptenhance.isModCache!="undefined")
 				return tptenhance.isModCache;
 			tptenhance.isModCache = false;
 			$(".main-menu .dropdown a.dropdown-toggle").each(function(){
-				if ($(this).text().indexOf("Admin")!=-1)
+				if ($(this).text().indexOf("Admin")!==-1)
 					tptenhance.isModCache = true;
 			});
 			return tptenhance.isModCache;
 		},
-		getCurrentGroupId:function()
-		{
-			return +($(".Pageheader a:eq(1)").attr("href").match(/[0-9]+/)[0]);
-		},
-		disableTagUrl:function(tag)
-		{
-			return "/Browse/Tags.html?Delete="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
-		},
-		removeTagUrl:function(tag, saveId)
-		{
-			return "/Browse/EditTag.json?Op=delete&ID="+encodeURIComponent(saveId)+"&Tag="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
-		},
-		searchTagUrl:function(search)
-		{
-			return "/Browse/Tags.html?Search_Query="+encodeURIComponent(search);
-		},
-		popoverSelectedTag:false,
-		popoverElement:false,
-		updatePopoverPosition:function()
-		{
-			var element = tptenhance.popoverElement;
-			var popOver = $(".popover");
-			if (!popOver.length || !element) return;
-			var left = element.offset().left - (popOver.width()/2) + (element.width()/2);
-			if (left<0) left = 0;
-			popOver.css("left", left);
-			popOver.css("top", element.offset().top + element.height());
-		},
-		removePopover:function()
-		{
-			tptenhance.popoverElement = false;
-			tptenhance.popoverSelectedTag = false;
-			$(".popover").remove();
-		},
-		createTagsPopover:function(element)
-		{
-			tptenhance.removePopover();
-			tptenhance.popoverElement = element;
-			var popOver = $('<div class="popover fade bottom in" style="display: block;"></div>');
-			popOver.appendTo(document.body);
-			var arrow = $('<div class="arrow"></div>').appendTo(popOver);
-			var inner = $('<div class="popover-inner"></div>').appendTo(popOver);
-			var title = $('<h3 class="popover-title">Tag Info</h3>').appendTo(inner);
-			var content = $('<div class="popover-content">Loading...</div>').appendTo(inner);
-			tptenhance.updatePopoverPosition();
-			return content;
-		},
-		tagsTooltip:function(element, tag){
-			// Tag info for tags in multiple places (e.g. /Browse/Tags.html and moderation page
 
-			// If clicking on the tag that is already open, close the info popup
-			if (tag==tptenhance.popoverSelectedTag)
-			{
-				tptenhance.removePopover();
-				return;
-			}
-
-			var filterUser = (window.location.toString().indexOf("/User/Moderation.html")!=-1);
-			var content = tptenhance.createTagsPopover(element);
-			tptenhance.popoverSelectedTag = tag;
-			var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(tag);
-			$.get(getLocation, function(data){
-				content.html(data);
-				var separator = false;
-				var currentUserName = $('.SubmenuTitle').text();
-				// Go through the tags in the popup and add Remove links
-				content.find('div.TagInfo').each(function(){
-					var tagInfo = $(this);
-					var saveId = $(tagInfo.find("a")[0]).text();
-					var userName = $(tagInfo.find("a")[1]).text();
-					var delButton = $('<a class="pull-right" title="Remove tag from this save">Remove</a>');
-					delButton.attr('href',tptenhance.removeTagUrl(tag,saveId));
-					delButton.appendTo($(this));
-					delButton.on('click', tptenhance.tags.removeLinkClick);
-					// If on a user moderation page, show tags from other users at the end
-					if (filterUser && userName!=currentUserName)
-					{
-						if (!separator) separator = $('<hr>').appendTo(content);
-						$(this).appendTo(content);
-					}
-				});
-			}, "html");
-		},
-		tagTooltip:function(element, tag, saveId){
-			// Tag info for a tag in a single place, e.g. viewing a save
-
-			// If clicking on the tag that is already open, close the info popup
-			if (tag==tptenhance.popoverSelectedTag)
-			{
-				tptenhance.removePopover();
-				return;
-			}
-
-			var content = tptenhance.createTagsPopover(element);
-			tptenhance.popoverSelectedTag = tag;
-			var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(tag)+"&SaveID="+encodeURIComponent(saveId);
-			$.get(getLocation, function(data){
-				content.html(data);
-				var clickFunc = function(e){
-					e.preventDefault();
-					var url = this.href;
-					var that = $(this);
-					if (that.text()=="Disable")
-						that.replaceWith('<div class="pull-right label label-info" style="margin-right:10px;"><i class="icon-refresh icon-white"></i> <strong>Disabling...</strong></div>');
-					else
-						that.replaceWith(tptenhance.deletingHtml);
-					$.get(url,function(){
-						element.remove();// remove tag text
-						if (tptenhance.popoverSelectedTag==tag)
-							tptenhance.removePopover();// remove tag info popup
-						tptenhance.updatePopoverPosition();
-					});
-				};
-				content.find('div.TagInfo').each(function(){
-					var delButton = $('<a class="pull-right" title="Remove tag from this save">Remove</a>');
-					delButton.attr('href',tptenhance.removeTagUrl(tag,saveId));
-					delButton.appendTo($(this));
-					delButton.on('click', clickFunc);
-					var disableButton = $('<a class="pull-right" title="Disable tag">Disable</a>');
-					disableButton.attr('href',tptenhance.disableTagUrl(tag)+"&Redirect="+encodeURIComponent(location.pathname+location.search));
-					disableButton.css('margin','0 10px');
-					disableButton.appendTo($(this));
-					disableButton.on('click', clickFunc);
-					var showMore = $('<div style="text-align:right;clear:right;"><a>Show uses on other saves</a></div>');
-					showMore.appendTo($(this));
-					showMore = showMore.find("a");
-					showMore.attr('href',tptenhance.searchTagUrl(tag));
-					showMore.on('click', function(e){
-						e.preventDefault();
-						tptenhance.removePopover();
-						tptenhance.tagsTooltip(element, tag);
-					});
-					
-				});
-			}, "html");
-		},
 		LoadForumBlocks:function(){
 			tptenhance.oldLoadForumBlocks();
 			$(".Actions > a").each(function(){
@@ -213,6 +89,7 @@ contentEval(function(){
 				{
 					$(this).click(function(e){
 						e.preventDefault();
+						$(this).addClass("disabled btn-primary")
 						$.get(this.href);
 						var newElement = $(this).parents('.Comment').children('.Message');
 						postID = newElement.attr('id').split("-")[1];
@@ -224,72 +101,58 @@ contentEval(function(){
 				}
 			});
 		},
-		updateSaveComments:function(url, from){
-			$("#ActionSpinner").fadeIn("fast");
-			tptenhance.commentPageRequestType = from;
-			// url = url.replace(/\.html\?/, ".json?Mode=MessagesOnly&");
-			tptenhance.commentPageRequest = $.get(url, function(data){
-				data = $(data);
-				$("#ActionSpinner").fadeOut("fast");
-				tptenhance.commentPageRequest = false;
-				//$(".Pagination").html(data.Pagination);
-				$(".Pagination").replaceWith(data.find(".Pagination"));
-				//$("ul.MessageList").empty();
-				//$("ul.MessageList").html(data.Comments);
-				$("ul.MessageList").replaceWith(data.find("ul.MessageList"));
-				tptenhance.attachSaveCommentHandlers();
-			}, "html");//"json"
-		},
-		commentPageRequest:false,
-		commentPageRequestType:false,
-		commentDeleteWaiting:0,
-		attachSaveCommentHandlers:function(){
-			var clickFn = function(e){
-				e.preventDefault();
-				var url = this.href+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl);
-				var info = $(tptenhance.deletingHtml);
-				$(this).parents('.Actions').replaceWith(info);
-				tptenhance.commentDeleteWaiting++;
-				if (tptenhance.commentPageRequest && tptenhance.commentPageRequestType=="deleteComment")
-				{
-					tptenhance.commentPageRequest.abort();
-					tptenhance.commentPageRequest = false;
-				}
-				$.get(url, function(){
-					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong>');
-					tptenhance.commentDeleteWaiting--;
-					if (tptenhance.commentDeleteWaiting<=0)
-					{
-						tptenhance.updateSaveComments(window.lastComments, "deleteComment");
-					}
-				});
-				return false;
+		comments:
+		{
+			deleteUrl:function(commentId, saveId)
+			{
+				return "/Browse/View.html?ID="+encodeURIComponent(saveId)+"&DeleteComment="+encodeURIComponent(commentId);
+			},
+			// Get the ID of the comment inside elem (only works for moderators, since only they get a "Delete" link)
+			getId:function(elem)
+			{
+				var deleteLink = $(elem).find(".Actions a");
+				if (deleteLink.length)
+					return +(deleteLink.attr("href").match(/DeleteComment=[0-9]+/)[0].split("=")[1]);
+				else
+					return null;
 			}
-			$(".Actions a").each(function(){
-				if (this.href.indexOf('DeleteComment=')!=-1)
-					$(this).click(clickFn);
-			});
-			$(".Pagination a").die('click');
-			$(".Pagination a").on('click', function(e){
-				e.preventDefault();
-				window.lastComments = this.href;
-				if (tptenhance.commentPageRequest)
-					tptenhance.commentPageRequest.abort();
-				tptenhance.updateSaveComments(window.lastComments, "pagination");
-			});
 		},
 		tags:
 		{
-			removeLinkClick:function(e){
-				e.preventDefault();
-				var tagInfo = $(this).parents('div.TagInfo');
-				var url = this.href;
-				var info = $(tptenhance.deletingHtml);
-				$(this).replaceWith(info);
-				$.get(url, function(){
-					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong></div>');
-				});
+			// lists of callbacks triggered when tags are removed/disabled/enabled
+			// callback fn arguments: tag text, save id
+			tagRemovedCallbacks:$.Callbacks(),
+			// callback fn arguments: tag text
+			tagDisabledCallbacks:$.Callbacks(),
+			tagEnabledCallbacks:$.Callbacks(),
+
+			disableUrl:function(tag)
+			{
+				return "/Browse/Tags.html?Delete="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
 			},
+			enableUrl:function(tag)
+			{
+				return "/Browse/Tags.html?UnDelete="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
+			},
+			removeUrl:function(tag, saveId)
+			{
+				return "/Browse/EditTag.json?Op=delete&ID="+encodeURIComponent(saveId)+"&Tag="+encodeURIComponent(tag)+"&Key="+encodeURIComponent(tptenhance.getSessionKey());
+			},
+			searchUrl:function(search)
+			{
+				return "/Browse/Tags.html?Search_Query="+encodeURIComponent(search);
+			},
+			// Tag info HTML, showing moderators which user placed a particular tag
+			// Optional argument saveId: only show who placed the tag on a single save, instead of showing all instances of the tag
+			infoUrl:function(tagText, saveId)
+			{
+				var url = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(tagText);
+				if (typeof saveId!="undefined")
+					url += "&SaveID="+encodeURIComponent(saveId);
+				return url;
+			},
+
+			// Event handlers to use an ajax request for enable/disable button clicks for tags displayed in a div.Tag (on /Browse/Tags.html and user moderation pages)
 			disableButtonClick:function(e){
 				e.preventDefault();
 				var tag = $(this).parents('.Tag').find(".TagText").text();
@@ -302,6 +165,7 @@ contentEval(function(){
 				$.get(url, function()
 				{
 					tptenhance.tags.showDisabled(tagElem);
+					tptenhance.tags.tagDisabledCallbacks.fire(tagElem.find(".TagText").text());
 				});
 			},
 			enableButtonClick:function(e){
@@ -313,14 +177,20 @@ contentEval(function(){
 				$.get(url, function()
 				{
 					tptenhance.tags.showEnabled(tagElem);
+					tptenhance.tags.tagEnabledCallbacks.fire(tagElem.find(".TagText").text());
 				});
 			},
 			attachHandlers:function(baseElem){
+				// Attach event handlers which will make tag disabling/enabling happen in an ajax request. Also add a clearer tooltip for Disable buttons.
+				// Does not attach event handlers for tag info popups
 				baseElem.find('.UnDelButton').off('click').on('click', tptenhance.tags.enableButtonClick);
 				baseElem.find('.DelButton').off('click').on('click', tptenhance.tags.disableButtonClick).attr('title', 'Disable');
 			},
-			// Change the tag to appear as disabled or enabled
+
+			// Change a tag to appear as disabled or enabled (used by event handlers above)
 			showDisabled:function(tagElem){
+				if (tagElem.hasClass('Restricted'))
+					return;
 				tagElem.addClass('Restricted');
 				tagElem.find('.icon-refresh').remove();
 				var btn = tagElem.find('.DelButton');
@@ -330,6 +200,8 @@ contentEval(function(){
 				tptenhance.tags.attachHandlers(tagElem);
 			},
 			showEnabled:function(tagElem){
+				if (!tagElem.hasClass('Restricted'))
+					return;
 				tagElem.removeClass('Restricted');
 				tagElem.find('.icon-refresh').remove();
 				var btn = tagElem.find('.UnDelButton');
@@ -337,15 +209,78 @@ contentEval(function(){
 				btn.attr('href', btn.attr('href').replace('/Browse/Tags.html?UnDelete=','/Browse/Tags.html?Delete='));
 				btn.attr('title', 'Approve');
 				tptenhance.tags.attachHandlers(tagElem);
+			},
+			// callbacks for updating status of built-in tag elements (provided by powdertoy.co.uk instead of added by this script) when this script removes/disables/enables a tag
+			default_onTagRemoved:function(affectedTagText, affectedSaveId){
+				if (typeof currentSaveID=="undefined" || affectedSaveId!=currentSaveID)
+					return;
+				$(".SaveTags span.Tag.label").each(function(){
+					if ($(this).text()===affectedTagText)
+						$(this).addClass("label-warning");
+				});
+			},
+			default_onTagDisabled:function(affectedTagText){
+				$("div.Tag").each(function(){
+					var tagtextelems = $(this).find(".TagText");
+					if (tagtextelems.length && tagtextelems.text()===affectedTagText)
+						tptenhance.tags.showDisabled($(this));
+				});
+				$(".SaveTags span.Tag.label").each(function(){
+					if ($(this).text()===affectedTagText)
+						$(this).addClass("label-danger label-important");
+				});
+			},
+			default_onTagEnabled:function(affectedTagText){
+				$("div.Tag").each(function(){
+					var tagtextelems = $(this).find(".TagText");
+					if (tagtextelems.length && tagtextelems.text()===affectedTagText)
+						tptenhance.tags.showEnabled($(this));
+				});
+				$(".SaveTags span.Tag.label").each(function(){
+					if ($(this).text()===affectedTagText)
+						$(this).removeClass("label-danger label-important");
+				});
+			},
+			isTagElemDisabled:function(tagElem){
+				tagElem = $(tagElem);
+				if (tagElem.is("span.TagText"))
+					tagElem = tagElem.parents(".Tag");
+				if (tagElem.is(".label.Tag"))
+					return tagElem.hasClass("label-danger") || tagElem.hasClass("label-important");
+				else
+					return tagElem.hasClass("Restricted");
+			},
+			isTagElemRemoved:function(tagElem){
+				tagElem = $(tagElem);
+				if (tagElem.is("span.TagText"))
+					tagElem = tagElem.parents(".Tag");
+				if (tagElem.is(".label.Tag"))
+					return tagElem.hasClass("label-warning");
+				return false;
+			},
+			createDisableLink:function(tagText){
+				return $('<a class="Tag-LinkDisable" title="Disable tag">Disable</a>')
+					.attr('href', tptenhance.tags.disableUrl(tagText)+"&Redirect="+encodeURIComponent(location.pathname+location.search));
+			},
+			createEnableLink:function(tagText){
+				return $('<a class="Tag-LinkEnable" title="Enable tag">Enable</a>')
+					.attr('href', tptenhance.tags.enableUrl(tagText)+"&Redirect="+encodeURIComponent(location.pathname+location.search));
 			}
 		},
-		makeSaveLinks:function(messages)
+		makeSaveLinks:function(messages, convertAllNumbers)
 		{
+			// Turn numbers which might be save IDs into links
+			// 'messages' should be the jQuery elements to process, contents should be plain text
+			var regex;
+			if (typeof convertAllNumbers!="undefined" && convertAllNumbers)
+				regex = /\b(?:(?:id|save|saveid|~)[^\d\w]?[\s]*)?[0-9]+\b/gi;
+			else
+				regex = /\b(?:(?:id|save|saveid|~)[^\d\w]?[\s]*)[0-9]+\b/gi;
 			messages.each(function(){
 				var msg = $(this);
 				var text = msg.text();
 				msg.empty();
-				var regex = /\b(?:(?:id|save|saveid)[^\d\w\s]?)?[0-9]+\b/gi;
+
 				var result, prevLastIndex = 0;
 				regex.lastIndex = 0;
 				while (result=regex.exec(text))
@@ -368,6 +303,13 @@ contentEval(function(){
 			threadUrl:function(id)
 			{
 				return "/Discussions/Thread/View.html?Thread="+encodeURIComponent(id);
+			}
+		},
+		groups:{
+			currentGroupId:function()
+			{
+				// ID of the group currently being viewed
+				return +($(".Pageheader a:eq(1)").attr("href").match(/[0-9]+/)[0]);
 			}
 		},
 		reports:{
@@ -658,8 +600,6 @@ contentEval(function(){
 											txt += data.Tags.length+" tags, ";
 											if (data.CommentPageCount>1)
 												txt += data.CommentPageCount+" pages of comments";
-											else if (data.Comments.length>=10)
-												txt += "many comments";
 											else
 												txt += data.Comments.length+" comments";
 										}
@@ -672,7 +612,7 @@ contentEval(function(){
 						});
 						
 						cell = $('<td><a></a></td>').addClass('IPAddress').appendTo(tableRow);
-						cell.children().first().attr('href', tptenhance.IPMapUrl(d.SourceAddress)).text(d.SourceAddress);
+						cell.children().first().attr('href', tptenhance.ipMapUrl(d.SourceAddress)).text(d.SourceAddress);
 						if (typeof ipcolours[d.SourceAddress] != "undefined" && ipcolours[d.SourceAddress] != "")
 							cell.css('background-color', ipcolours[d.SourceAddress]);
 						cell = $('<td></td>').addClass('VoteType');
@@ -829,7 +769,7 @@ contentEval(function(){
 					data.Comments.push({
 						SaveID: +comment.find(".SaveInfo a").text(),
 						date: comment.find(".Date").text(),
-						CommentID: +comment.find(".Actions a").attr("href").match(/DeleteComment=[0-9]+/)[0].split("=")[1],
+						CommentID: +tptenhance.comments.getId(comment),
 						Message: comment.find(".Message").html()
 					});
 				});
@@ -872,21 +812,665 @@ contentEval(function(){
 				}, "html");
 			}
 		},
-		IPMapUrl:function(ip)
+		ipMapUrl:function(ip)
 		{
 			return "/IPTools.html?IP="+encodeURIComponent(ip);
 		}
+	};
+
+	tptenhance.tags.tagRemovedCallbacks.add(tptenhance.tags.default_onTagRemoved);
+	tptenhance.tags.tagDisabledCallbacks.add(tptenhance.tags.default_onTagDisabled);
+	tptenhance.tags.tagEnabledCallbacks.add(tptenhance.tags.default_onTagEnabled);
+
+	tptenhance.tags.TagInfoPopup = function(){
+		this.targetElem = false;
+		this.popupElem = false;
+
+		this.selectedTagText = "";
+		this.tagDisabled = false;
+		this.getInfoXHR = false;
+		this.updatePosition = this.updatePosition.bind(this);
+		this.handleRemoveLinkClick = this.handleRemoveLinkClick.bind(this);
+		this.handleDisableLinkClick = this.handleDisableLinkClick.bind(this);
+		this.handleEnableLinkClick = this.handleEnableLinkClick.bind(this);
+		this.onTagRemoved = this.onTagRemoved.bind(this);
+		this.onTagDisabled = this.onTagDisabled.bind(this);
+		this.onTagEnabled = this.onTagEnabled.bind(this);
 	}
+	tptenhance.tags.TagInfoPopup.prototype.isOpen = function(){
+		return (!!this.targetElem);// return true if the popup is visible
+	}
+	tptenhance.tags.TagInfoPopup.prototype.normaliseTargetElem = function(elem){
+		elem = $(elem);
+		if (elem.hasClass("TagText"))
+			elem = elem.parents(".Tag");
+		return elem;
+	}
+	tptenhance.tags.TagInfoPopup.prototype.handleRemoveLinkClick = function(e){
+		var tagInfo = $(e.target).parents('div.TagInfo');
+		var saveId;
+		var matches = $(tagInfo).find("a.Tag-LinkRemove").attr("href").match(/ID=([0-9]+)/);
+		if (matches)
+			saveId = +matches[1];
+		else if (typeof currentSaveID!="undefined")
+			saveId = currentSaveID;
+		var url = e.target.href;
+		var placeholder = $(tptenhance.deletingHtml).addClass("Tag-LinkRemove");
+		$(e.target).replaceWith(placeholder);
+		var that = this;
+		var tagText = this.selectedTagText;
+		$.get(url, function(){
+			placeholder.replaceWith($(tptenhance.deletedHtml).addClass("Tag-LinkRemoved"));
+
+			if (that.targetElem.is("span.Tag.label"))
+				that.targetElem.addClass("label-warning");
+			tptenhance.tags.tagRemovedCallbacks.fire(tagText, saveId);
+		});
+		return false;
+	};
+	tptenhance.tags.TagInfoPopup.prototype.onDisabledStateChange = function(newState){// newState=true means the tag is now disabled
+		this.tagDisabled = newState;
+		var tagElem = this.targetElem;
+		if (this.tagDisabled)
+		{
+			this.popupElem.find(".Tag-LinkDisable").addClass("hide");
+			this.popupElem.find(".Tag-LinkEnable").removeClass("hide");
+
+			this.popupElem.find(".TagPopup-showOthers").remove();
+			this.popupElem.find(".Tag-LinkRemove").remove();
+		}
+		else
+		{
+			this.popupElem.find(".Tag-LinkDisable").removeClass("hide");
+			this.popupElem.find(".Tag-LinkEnable").addClass("hide");
+		}
+		this.popupElem.find(".Tag-placeholder-StatusChange").remove();
+	}
+
+	tptenhance.tags.TagInfoPopup.prototype.handleDisableLinkClick = function(e){
+		var tagInfo = $(e.target).parents('div.TagInfo');
+		var url = e.target.href;
+		var placeholder = $('<div class="pull-right label label-info Tag-LinkDisable Tag-placeholder-StatusChange"><i class="icon-refresh icon-white"></i> <strong>Disabling...</strong></div>');
+		placeholder.insertAfter(e.target);
+		$(e.target).addClass("hide");
+		var tagText = this.selectedTagText;
+		$.get(url, function(){
+			tptenhance.tags.tagDisabledCallbacks.fire(tagText);
+		});
+		return false;
+	};
+	tptenhance.tags.TagInfoPopup.prototype.handleEnableLinkClick = function(e){
+		var tagInfo = $(e.target).parents('div.TagInfo');
+		var url = e.target.href;
+		var placeholder = $('<div class="pull-right label label-info Tag-LinkEnable Tag-placeholder-StatusChange"><i class="icon-refresh icon-white"></i> <strong>Enabling...</strong></div>');
+		placeholder.insertAfter(e.target);
+		$(e.target).addClass("hide");
+		var tagText = this.selectedTagText;
+		$.get(url, function(){
+			tptenhance.tags.tagEnabledCallbacks.fire(tagText);
+		});
+		return false;
+	};
+	tptenhance.tags.TagInfoPopup.prototype.onTagRemoved = function(affectedTagText, affectedSaveId){
+		if (!this.isOpen() || affectedTagText!==this.selectedTagText)
+			return;
+
+		this.popupElem.find('div.TagInfo').each(function(){
+			var removeLink = $(this).find("a.Tag-LinkRemove");
+			if (!removeLink.length)
+				return;
+			var tagSaveId;
+			var matches = removeLink.attr("href").match(/ID=([0-9]+)/);
+			if (matches)
+				tagSaveId = +matches[1];
+			else if (typeof currentSaveID!="undefined")
+				tagSaveId = currentSaveID;
+			if (tagSaveId==affectedSaveId)
+				removeLink.replaceWith($(tptenhance.deletedHtml).addClass("Tag-LinkRemoved"));
+		});
+		setTimeout(this.updatePosition,1);
+	}
+	tptenhance.tags.TagInfoPopup.prototype.onTagDisabled = function(affectedTagText){
+		if (this.isOpen() && affectedTagText===this.selectedTagText)
+			this.onDisabledStateChange(true);
+		setTimeout(this.updatePosition,1);
+	}
+	tptenhance.tags.TagInfoPopup.prototype.onTagEnabled = function(affectedTagText){
+		if (this.isOpen() && affectedTagText===this.selectedTagText)
+			this.onDisabledStateChange(false);
+		setTimeout(this.updatePosition,1);
+	}
+
+	tptenhance.tags.TagInfoPopup.prototype.createRemoveLink = function(tagText, saveId){
+		var link = $('<a class="pull-right Tag-LinkRemove" title="Remove tag from this save">Remove</a>');
+		link.attr('href',tptenhance.tags.removeUrl(tagText,saveId))
+		link.on('click', this.handleRemoveLinkClick);
+		return link;
+	}
+	tptenhance.tags.TagInfoPopup.prototype.createTagStatusLinks = function(tagText){
+		var container = $("<span></span>")
+		container.append(tptenhance.tags.createDisableLink(tagText)
+			.addClass("pull-right")
+			.on('click', this.handleDisableLinkClick)
+		);
+		container.append(tptenhance.tags.createEnableLink(tagText)
+			.addClass("pull-right hide")
+			.on('click', this.handleEnableLinkClick)
+		);
+		return container.children();
+	}
+
+	// Create a popup, with placeholder 'Loading...' text
+	tptenhance.tags.TagInfoPopup.prototype.create = function(targetElem){
+		tptenhance.tags.tagRemovedCallbacks.add(this.onTagRemoved);
+		tptenhance.tags.tagDisabledCallbacks.add(this.onTagDisabled);
+		tptenhance.tags.tagEnabledCallbacks.add(this.onTagEnabled);
+
+		this.remove();
+		this.targetElem = targetElem = this.normaliseTargetElem(targetElem);
+		this.tagDisabled = tptenhance.tags.isTagElemDisabled(this.targetElem);
+		this.popupElem = $('<div class="popover fade bottom in" style="display: block;"></div>');
+		this.popupElem.appendTo(document.body);
+		var arrow = $('<div class="arrow"></div>').appendTo(this.popupElem);
+		var inner = $('<div class="popover-inner"></div>').appendTo(this.popupElem);
+		var title = $('<h3 class="popover-title">Tag Info</h3>').appendTo(inner);
+		var content = $('<div class="popover-content">Loading...</div>').appendTo(inner);
+		this.updatePosition();
+		return content;
+	};
+	// Update popup position (below centre of element which generated popup)
+	tptenhance.tags.TagInfoPopup.prototype.updatePosition = function(){
+		if (!this.targetElem || !this.popupElem) return;
+		var left = this.targetElem.offset().left - (this.popupElem.width()/2) + (this.targetElem.width()/2);
+		if (left<0) left = 0;
+		this.popupElem.css("left", left);
+		this.popupElem.css("top", this.targetElem.offset().top + this.targetElem.height());
+	};
+	// Remove the popup
+	tptenhance.tags.TagInfoPopup.prototype.remove = function(){
+		if (this.popupElem)
+			this.popupElem.remove();
+		this.popupElem = false;
+		this.targetElem = false;
+	};
+
+	// Toggle a popup to show who placed a particular tag on a single save
+	tptenhance.tags.TagInfoPopup.prototype.showSingle = function(targetElem, tagText, saveId){
+		// If clicking on the tag that is already open, close the info popup
+		targetElem = this.normaliseTargetElem(targetElem);
+		if (this.isOpen() && targetElem.get(0)===this.targetElem.get(0))
+		{
+			this.remove();
+			return;
+		}
+		// Abort any previous pending request
+		if (this.getInfoXHR)
+			this.getInfoXHR.abort();
+
+		this.selectedTagText = tagText;
+		var content = this.create(targetElem);
+		var that = this;
+		this.getInfoXHR = $.get(tptenhance.tags.infoUrl(tagText, saveId), function(data){
+			that.getInfoXHR = false;
+			content.html(data);
+			content.find('div.TagInfo').each(function(){
+				$(this).append(that.createRemoveLink(tagText, saveId));
+				$(this).append(that.createTagStatusLinks(tagText));
+			});
+			var showMore = $('<div class="TagPopup-showOthers"><a>Show uses on other saves</a></div>');
+			showMore.appendTo(content);
+			showMore.find("a")
+				.attr('href',tptenhance.tags.searchUrl(tagText))
+				.on('click', function(e){
+					that.remove();
+					that.showAll(targetElem, tagText)
+					return false;
+				});
+			that.updatePosition();
+			if (that.tagDisabled)
+				that.onDisabledStateChange(true);
+		}, "html");
+	}
+
+	// Toggle a popup to show all instances of a particular tag
+	// Optional argument sortUser: sorts tags so that tags placed by that username are at the top
+	tptenhance.tags.TagInfoPopup.prototype.showAll = function(targetElem, tagText, sortUser){
+		// If clicking on the tag that is already open, close the info popup
+		targetElem = this.normaliseTargetElem(targetElem);
+		if (this.isOpen() && targetElem.get(0)===this.targetElem.get(0))
+		{
+			this.remove();
+			return;
+		}
+		// Abort any previous pending request
+		if (this.getInfoXHR)
+			this.getInfoXHR.abort();
+
+		this.selectedTagText = tagText;
+		var content = this.create(targetElem);
+		var that = this;
+		this.getInfoXHR = $.get(tptenhance.tags.infoUrl(tagText), function(data){
+			that.getInfoXHR = false;
+			content.html(data);
+
+			var tagStatusLinks = $('<div class="pull-right" style="margin-bottom:7px;"></div>').append(that.createTagStatusLinks(tagText));
+			content.prepend(tagStatusLinks);
+
+			var shouldSortUser = (typeof sortUser!="undefined" && sortUser!=="");
+			var separator = false;
+			// Go through the tags in the popup and add Remove links
+			content.find('div.TagInfo').each(function(){
+				var tagInfo = $(this);
+				var saveId = $(tagInfo.find("a")[0]).text();
+				var userName = $(tagInfo.find("a")[1]).text();
+
+				$(this).append(that.createRemoveLink(tagText, saveId));
+
+				if (shouldSortUser && userName!==sortUser)
+				{
+					if (!separator) separator = $('<hr>').appendTo(content);
+					$(this).appendTo(content);// (move this tag to end - tags which don't get moved stay where they are, above the separator)
+				}
+			});
+
+			that.updatePosition();
+			if (that.tagDisabled)
+				that.onDisabledStateChange(true);
+		}, "html");
+	};
+
+	tptenhance.tags.tagInfoPopup = new tptenhance.tags.TagInfoPopup();
+
+
+	// Class to remove many instances of tags ("instance" here means a specific tag on a specific save) with a delay between requests
+	tptenhance.tags.TagInstanceRemover = function(){
+		this.tags = [];
+		this.callback_progress = null;
+		this.callback_finished = null;
+		this.start = this.start.bind(this);
+		this._tagStart = this._tagStart.bind(this);
+		this._tagDone = this._tagDone.bind(this);
+		this.currentXHR = null;
+		this.interval = 500; // delay in ms between requests
+	};
+	tptenhance.tags.TagInstanceRemover.prototype.push = function(tagText, saveId){
+		this.tags.push({tagText:tagText, saveId:saveId});
+	}
+	tptenhance.tags.TagInstanceRemover.prototype.start = function(){
+		this.tagsCount = this.tags.length;
+		this._tagStart();
+	};
+	tptenhance.tags.TagInstanceRemover.prototype._tagStart = function(){
+		if (!this.tags.length){
+			if (this.callback_finished)
+				this.callback_finished();
+			return;
+		}
+
+		var total = this.tagsCount;
+		var done = total-this.tags.length;
+		this.currentTag = this.tags.shift();
+		if (this.callback_progress)
+			this.callback_progress(done, total, this.currentTag);
+		this.currentXHR = $.get(tptenhance.tags.removeUrl(this.currentTag.tagText,this.currentTag.saveId), this._tagDone);
+	};
+	tptenhance.tags.TagInstanceRemover.prototype._tagDone = function(){
+		tptenhance.tags.tagRemovedCallbacks.fire(this.currentTag.tagText,this.currentTag.saveId);
+		setTimeout(this._tagStart, this.interval);
+	};
+
+
+	// Class to remove all tags by a specific user
+	// container is an element to put the progress bars in
+	// tagElements should be a jQuery collection of div.Tag's (e.g. obtained from the moderation page for that user)
+	// TODO: error handling for $.get ?
+	tptenhance.tags.RemoveAllTagsByUser = function(container, tagElements, targetUsername){
+		this.removeTag_start = this.removeTag_start.bind(this);
+		this.removeTag_fetched = this.removeTag_fetched.bind(this);
+		this.removeTag_progress = this.removeTag_progress.bind(this);
+		this.removeTag_done = this.removeTag_done.bind(this);
+
+		this.progressElem = $('<div style="width:40%;margin-right:5%" class="pull-left"><div class="progresstitle">Removing tags</div><div class="progress"><div class="bar" role="progressbar" style="width: 0%;"></div></div></div>');
+		this.progressSubElem = $('<div style="width:40%;" class="pull-left"><div class="progresstitle">&nbsp;</div><div class="progress"><div class="bar" role="progressbar" style="width: 0%; transition:width 0s;"></div></div>');
+		this.container = container;
+
+		this.tagElements = tagElements;
+		this.tagsQueue = tagElements.toArray();
+		this.targetUsername = targetUsername;
+		this.currentXHR = null;
+		this.interval = 500; // delay in ms between requests
+	};
+
+	tptenhance.tags.RemoveAllTagsByUser.prototype.start = function(){
+		this.container.append(this.progressElem).append(this.progressSubElem).append('<div class="Clear"></div>');
+		tptenhance.tags.tagInfoPopup.updatePosition();
+		this.removeTag_start();
+	};
+
+	tptenhance.tags.RemoveAllTagsByUser.prototype._setProgress = function(elem, doneAmount, statusText){
+		elem.find(".bar").css('width', (doneAmount*100)+'%');
+		elem.find(".progresstitle").text(statusText);
+	}
+	tptenhance.tags.RemoveAllTagsByUser.prototype.setProgress = function(doneAmount, statusText){
+		this._setProgress(this.progressElem, doneAmount, statusText);
+	}
+	tptenhance.tags.RemoveAllTagsByUser.prototype.setProgressSub = function(doneAmount, statusText){
+		this._setProgress(this.progressSubElem, doneAmount, statusText);
+	};
+
+	// Fetch tag info (to find out which saves to remove it from) for the first tag in the queue
+	tptenhance.tags.RemoveAllTagsByUser.prototype.removeTag_start = function(){
+		if (!this.tagsQueue.length){
+			this.onFinished();
+			return;
+		}
+
+		var total = this.tagElements.length;
+		var done = total-this.tagsQueue.length;
+		this.currentTag = this.tagsQueue.shift();
+		this.currentTagText = $(this.currentTag).find(".TagText").text();
+		this.setProgress(done/total, "Removing tag '"+this.currentTagText+"' ("+(done+1)+"/"+total+")");
+		this.setProgressSub(0, "Fetching save list for tag '"+this.currentTagText+"'")
+
+		this.currentXHR = $.get(tptenhance.tags.infoUrl(this.currentTagText), this.removeTag_fetched, "html");
+	};
+
+	tptenhance.tags.RemoveAllTagsByUser.prototype.removeTag_fetched = function(data){
+		this.tagInstanceRemover = new tptenhance.tags.TagInstanceRemover();
+		var tagInfo = $(data).filter('.TagInfo');
+		this.currentTag_onlyUser = true;// true if all instances of this tag were placed by this user
+		// Parse tag info that has just been fetched
+		var that = this;
+		tagInfo.each(function(){
+			var tagInfo = $(this);
+			var saveId = $(tagInfo.find("a")[0]).text();
+			var userName = $(tagInfo.find("a")[1]).text();
+			if (userName===that.targetUsername)
+				that.tagInstanceRemover.push(that.currentTagText, saveId);
+			else
+				that.currentTag_onlyUser = false;
+		});
+		this.tagInstanceRemover.callback_progress = this.removeTag_progress;
+		this.tagInstanceRemover.callback_finished = this.removeTag_done;
+		// Start removing tags placed by this user
+		setTimeout(this.tagInstanceRemover.start, this.interval);
+	};
+
+	tptenhance.tags.RemoveAllTagsByUser.prototype.removeTag_progress = function(done, total, tagInstance){
+		this.setProgressSub(done/total, "Removing tag '"+tagInstance.tagText+"' from save "+tagInstance.saveId+" ("+(done+1)+"/"+total+")");
+	};
+
+	tptenhance.tags.RemoveAllTagsByUser.prototype.removeTag_done = function(){
+		this.setProgressSub(1, "Removed tag '"+this.currentTagText+"'");
+		if (this.currentTag_onlyUser)
+			$(this.currentTag).addClass("tag-removedall");// all instances of this tag removed
+		else
+			$(this.currentTag).addClass("tag-removedcurrent");// other users also placed this tag, so some instances left
+
+		setTimeout(this.removeTag_start, this.interval);
+	};
+
+	tptenhance.tags.RemoveAllTagsByUser.prototype.onFinished = function(){
+		this.container.empty();
+		this.container.append('<div class="alert alert-success">All tags by this user removed</span></div>');
+		tptenhance.tags.tagInfoPopup.updatePosition();
+	};
+
+
+
+	tptenhance.tags.SaveTagsTable = function(tagElems){
+		this.tagStart = this.tagStart.bind(this);
+		this.tagFetched = this.tagFetched.bind(this);
+		this.pendingRows = [];
+		this.fetchRow = false;
+		this.tableElem = $('<table cellspacing="0" cellpadding="0" class="TagsTable"><thead><tr><th>Tag</th><th>Username</th><th>&nbsp;</th></tr></thead><tbody></tbody></table>');
+		var tbody = this.tableElem.find("tbody");
+		var that = this;
+		tagElems.each(function(){
+			var row = new tptenhance.tags.SaveTagsTableRow(this);
+			if (!tptenhance.tags.isTagElemDisabled(this) && !tptenhance.tags.isTagElemRemoved(this))
+				that.pendingRows.push(row);
+			tbody.append(row.rowElem);
+		});
+		this.tagStart();
+	}
+	tptenhance.tags.SaveTagsTable.prototype.tagStart = function()
+	{
+		this.fetchTimeout = false;
+		if (!this.pendingRows.length)
+			return;
+		this.fetchRow = this.pendingRows.shift();
+		$.get(tptenhance.tags.infoUrl(this.fetchRow.tagText, currentSaveID), this.tagFetched, "html");
+	}
+	tptenhance.tags.SaveTagsTable.prototype.tagFetched = function(data)
+	{
+		this.fetchRow.processFetchedInfo(data);
+		this.fetchTimeout = setTimeout(this.tagStart, 500);
+	}
+
+	tptenhance.tags.SaveTagsTableRow = function(tagElem){
+		this.handleRemoveLinkClick = this.handleRemoveLinkClick.bind(this);
+		this.handleDisableLinkClick = this.handleDisableLinkClick.bind(this);
+		this.handleEnableLinkClick = this.handleEnableLinkClick.bind(this);
+		this.onTagRemoved = this.onTagRemoved.bind(this);
+		this.onTagDisabled = this.onTagDisabled.bind(this);
+		this.onTagEnabled = this.onTagEnabled.bind(this);
+
+		this.tagElem = $(tagElem);
+		this.tagText = this.tagElem.text();
+		this.rowElem = $('<tr></tr>');
+		this.textCell = $('<td class="TagText"></td>').text(this.tagText).appendTo(this.rowElem);
+		this.userCell = $('<td>Loading...</td>').appendTo(this.rowElem);
+		this.actionsCell = $('<td class="TagActions"></td>').appendTo(this.rowElem);
+		this.removeLink = $('<a title="Remove tag from this save">Remove</a>')
+			.attr('href',tptenhance.tags.removeUrl(this.tagText,currentSaveID))
+			.on('click', this.handleRemoveLinkClick);
+		this.disableLink = $('<a title="Disable tag">Disable</a>')
+			.attr('href',tptenhance.tags.disableUrl(this.tagText)+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl))
+			.on('click', this.handleDisableLinkClick);
+		this.enableLink = $('<a title="Enable tag">Enable</a>')
+			.attr('href',tptenhance.tags.enableUrl(this.tagText)+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl))
+			.on('click', this.handleEnableLinkClick);
+		this.actionsCell.append(this.removeLink, this.disableLink, this.enableLink);
+
+		if (tptenhance.tags.isTagElemDisabled(this.tagElem))
+			this.disableLink.addClass("hide");
+		else
+			this.enableLink.addClass("hide");
+		if (tptenhance.tags.isTagElemDisabled(this.tagElem) || tptenhance.tags.isTagElemRemoved(this.tagElem))
+			this.userCell.html("&nbsp;");
+		if (tptenhance.tags.isTagElemRemoved(this.tagElem))
+			this.removeLink.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white" title="Removed"></i></span></span></span>');
+
+		tptenhance.tags.tagRemovedCallbacks.add(this.onTagRemoved);
+		tptenhance.tags.tagDisabledCallbacks.add(this.onTagDisabled);
+		tptenhance.tags.tagEnabledCallbacks.add(this.onTagEnabled);
+	}
+	tptenhance.tags.SaveTagsTableRow.prototype.onTagRemoved = function(affectedTagText, affectedSaveId){
+		if (affectedSaveId==currentSaveID && affectedTagText===this.tagText)
+		{
+			this.removeLink.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white" title="Removed"></i></span></span></span>');
+		}
+	}
+	tptenhance.tags.SaveTagsTableRow.prototype.onTagDisabled = function(affectedTagText){
+		if (affectedTagText===this.tagText)
+		{
+			this.disableLink.addClass("hide");
+			this.enableLink.removeClass("hide");
+		}
+	}
+	tptenhance.tags.SaveTagsTableRow.prototype.onTagEnabled = function(affectedTagText){
+		if (affectedTagText===this.tagText)
+		{
+			this.disableLink.removeClass("hide");
+			this.enableLink.addClass("hide");
+		}
+	}
+	tptenhance.tags.SaveTagsTableRow.prototype.processFetchedInfo = function(data){
+		this.userCell.empty();
+		this.userCell.append($(data).filter("div.TagInfo").find("a").first());
+	}
+	tptenhance.tags.SaveTagsTableRow.prototype.handleRemoveLinkClick = function(e){
+		var pendingIndicator = $('<span><span class="label label-info" title="Removing..."><i class="icon-refresh icon-white"></i></span></span>');
+		var url = e.target.href;
+		var that = this;
+		$.get(url,function(){
+			pendingIndicator.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white" title="Removed"></i></span></span></span>');
+			tptenhance.tags.tagRemovedCallbacks.fire(that.tagText, currentSaveID);
+		});
+		return false;
+	}
+	tptenhance.tags.SaveTagsTableRow.prototype.handleDisableLinkClick = function(e){
+		var pendingIndicator = $('<span><span class="label label-info" title="Disabling..."><i class="icon-refresh icon-white"></i></span></span>');
+		$(e.target).addClass("hide").before(pendingIndicator);
+		var url = e.target.href;
+		var that = this;
+		$.get(url,function(){
+			pendingIndicator.remove();
+			tptenhance.tags.tagDisabledCallbacks.fire(that.tagText);
+		});
+		return false;
+	}
+	tptenhance.tags.SaveTagsTableRow.prototype.handleEnableLinkClick = function(e){
+		var pendingIndicator = $('<span><span class="label label-info" title="Enabling..."><i class="icon-refresh icon-white"></i></span></span>');
+		$(e.target).addClass("hide").before(pendingIndicator);
+		var url = e.target.href;
+		var that = this;
+		$.get(url,function(){
+			pendingIndicator.remove();
+			tptenhance.tags.tagEnabledCallbacks.fire(that.tagText);
+		});
+		return false;
+	}
+
+	// Class to manage pagination and deletion+refreshing for a comments section (e.g. Browse/View.html or user moderation page)
+	tptenhance.comments.CommentView = function(container){
+		this.container = $(container);
+		this.wasPageChanged = {value:false};
+		this.commentPageRequest = null;
+		this.handleDeleteClick = this.handleDeleteClick.bind(this);
+		this.handlePaginationClick = this.handlePaginationClick.bind(this);
+		this.handlePaginationFetched = this.handlePaginationFetched.bind(this);
+
+		var that = this;
+		$(window).bind('popstate', function(){
+			that.changePage(''+self.location);
+		});
+		this.msgList = this.container.find(".MessageList");
+		this.pagination = this.container.find(".Pagination");
+		this.attachCommentHandlers();
+		this.attachPaginationHandlers();
+	};
+	tptenhance.comments.CommentView.prototype.attachCommentHandlers = function(){
+		var that = this;
+		this.msgList.find(".Actions a").each(function(){
+			if (this.href.indexOf('DeleteComment=')!==-1)
+			{
+				$(this).off('click').on('click',that.handleDeleteClick);
+				var url = $(this).attr('href');
+				var redirectUrl = (''+self.location).replace(/^http:\/\/powdertoy.co.uk/, '');
+				if (url.match(/Redirect=[^&]*/))
+					url = url.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(redirectUrl))
+				else if (url.indexOf('?')!==-1)
+					url += '&Redirect='+encodeURIComponent(redirectUrl);
+				else
+					url += '?Redirect='+encodeURIComponent(redirectUrl);
+				$(this).attr('href', url);
+			}
+		});
+		tptenhance.makeSaveLinks(this.msgList.find(".Post .Message"));
+	}
+	tptenhance.comments.CommentView.prototype.attachPaginationHandlers = function(){
+		this.pagination.find("a").off('click').on('click', this.handlePaginationClick);
+	}
+	tptenhance.comments.CommentView.prototype.handleDeleteClick = function(e){
+		var deleteLink = $(e.target);
+		var msg = deleteLink.parents(".Post");
+		var wasPageChanged = this.wasPageChanged;
+		var that = this;
+		var placeholder = $(tptenhance.deletingHtml);
+		deleteLink.css("display", "none");
+		msg.find(".Meta").prepend(placeholder);
+		msg.addClass("Deleting");
+		$.get(deleteLink.attr('href'), function(data){
+			msg.removeClass("Deleting").addClass("Deleted");
+			placeholder.replaceWith(tptenhance.deletedHtml);
+			if (!wasPageChanged.value)
+				that.mergeComments(data);
+		});
+		return false;
+	}
+	tptenhance.comments.CommentView.prototype.extractCommentsFromResponse = function(data){
+		return $(data).find(".MessageList");
+	}
+	tptenhance.comments.CommentView.prototype.extractPaginationFromResponse = function(data){
+		return $(data).find(".Pagination").first();
+	}
+	tptenhance.comments.CommentView.prototype.mergeComments = function(data){
+		var newComments = this.extractCommentsFromResponse(data).find(".Post");
+		var existingCommentIds = [];
+		var that = this;
+		// Check which comments are already displayed on the page
+		this.msgList.find(".Post").each(function(){
+			existingCommentIds.push(tptenhance.comments.getId($(this)));
+		});
+		// Insert comments which are in the response but not yet on the page (i.e. the comments which have moved up into the current page because some of the comments that were previously on the current page have been deleted)
+		newComments.each(function(){
+			var commentId = tptenhance.comments.getId($(this));
+			if (existingCommentIds.indexOf(commentId)===-1)
+				that.msgList.append($(this));
+		});
+		// Sort comments into the correct order (newest first / descending ID)
+		var commentArray = this.msgList.find(".Post").toArray();
+		commentArray.sort(function(a,b){
+			var idA = tptenhance.comments.getId(a);
+			var idB = tptenhance.comments.getId(b);
+			return (idA<idB) ? 1 : -1;
+		});
+		$(commentArray).detach().appendTo(this.msgList);
+		this.attachCommentHandlers();
+	}
+
+	tptenhance.comments.CommentView.prototype.handlePaginationClick = function(e){
+		var url = $(e.target).attr("href");
+		if (typeof history.pushState!="undefined")
+			history.pushState(null, "", url);
+		this.changePage(url);
+		return false;
+	}
+	tptenhance.comments.CommentView.prototype.changePage = function(url){
+		this.container.find("#ActionSpinner").fadeIn("fast");
+		this.wasPageChanged.value = true;
+		this.wasPageChanged = {value:false};
+		if (this.commentPageRequest)
+			this.commentPageRequest.abort();
+		// url = url.replace(/\.html\?/, ".json?Mode=MessagesOnly&");
+		this.commentPageRequest = $.get(url, this.handlePaginationFetched);
+	}
+	tptenhance.comments.CommentView.prototype.handlePaginationFetched = function(data){
+		this.commentPageRequest = null;
+		this.container.find("#ActionSpinner").fadeOut("fast");
+		/*$(".Pagination").html(data.Pagination);
+		$("ul.MessageList").empty();
+		$("ul.MessageList").html(data.Comments);*/
+		var newPagination = this.extractPaginationFromResponse(data);
+		this.pagination.empty().append(newPagination);
+		var newComments = this.extractCommentsFromResponse(data).find(".Post");
+		this.msgList.empty().append(newComments);
+		this.attachCommentHandlers();
+		this.attachPaginationHandlers();
+	}
+
+
 
 	$(document).ready(function(){
 		if (tptenhance.isMod())
 		{
+			// Add a menu link for editing the changelog on the download page.
 			$(".main-menu .pull-right .dropdown:first-child .dropdown-menu").append('<li class="item"><a href="/Documentation/Changelog.html">Changelog</a>');
 		}
 	});
 
-	// Override tag info popups, and add them to the user moderation page
-	// The overridden version has links to delete (instead of disabling) tags, and disabling+deleting is done in an Ajax request (no full page reload)
 	if (window.location.toString().indexOf("/User/Moderation.html")!=-1)
 	{
 		$(document).ready(function(){setTimeout(function(){
@@ -899,138 +1483,24 @@ contentEval(function(){
 				{
 					if (!confirm("Are you sure you want to remove all tags by this user?"))
 						return;
-					var progress = $('<div style="width:40%;margin-right:5%" class="pull-left"><div class="progresstitle">Removing tags</div><div class="progress"><div class="bar" role="progressbar" style="width: 0%;"></div></div></div>');
-					var progressSub = $('<div style="width:40%;" class="pull-left"><div class="progresstitle">&nbsp;</div><div class="progress"><div class="bar" role="progressbar" style="width: 0%; transition:width 0s;"></div></div>');
-					$("div.Tag").first().before(progress).before(progressSub).before('<div class="Clear"></div>');
-					$(this).remove();
-					var tags = $("div.Tag").toArray();
-					var tagCount = tags.length;
-					var tagSaves, tagSavesCount, tagSavesAllUsersCount=99;
-					var tagRemoveTimeout;
-					var currentTag, currentTagText;
-					var startTag, fetchedTag, startSaveTag, fetchedSaveTag;
-					var interval = 2000;
-					var currentUserName = $('.SubmenuTitle').text();
-					// TODO: error handling for $.get ?
-					startTag = function(){
-						if (!tags.length){
-							progress.next(".Clear").remove();
-							progressSub.remove();
-							progress.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>All tags by this user removed</strong></span></div>');
-							return;
-						}
-						currentTag = tags.shift();
-						currentTagText = $(currentTag).find(".TagText").text();
-						progress.find(".bar").css('width', ((tagCount-tags.length-1)/tagCount*100)+'%');
-						progress.find(".progresstitle").text("Removing tag '"+currentTagText+"' ("+(tagCount-tags.length)+"/"+tagCount+")");
-						var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(currentTagText);
-						$.get(getLocation, fetchedTag, "html");
-					}
-					fetchedTag = function(data){
-						tagSaves = [];
-						tagSavesAllUsersCount = 0;
-						$(data).filter('.TagInfo').each(function(){
-							var saveId = $($(this).find("a")[0]).text();
-							var userName = $($(this).find("a")[1]).text();
-							tagSavesAllUsersCount++;
-							if (userName==currentUserName)
-								tagSaves.push(saveId);
-						});
-						tagSavesCount = tagSaves.length;
-						progressSub.find(".bar").css('width', '0%');
-						progressSub.find(".progresstitle").text("Fetching save list for tag '"+currentTagText+"'");
-						tagRemoveTimeout = setTimeout(startSaveTag, interval);
-					}
-					startSaveTag = function(){
-						if (!tagSaves.length){
-							progressSub.find(".bar").css('width', '100%');
-							progressSub.find(".progresstitle").text("Removed tag '"+currentTagText+"'");
-							if (tagSavesAllUsersCount!=tagSavesCount)
-								$(currentTag).addClass("tag-removedcurrent");
-							else
-								$(currentTag).addClass("tag-removedall");
-							startTag();
-							return;
-						}
-						var saveId = tagSaves.shift();
-						progressSub.find(".bar").css('width', ((tagSavesCount-tagSaves.length-1)/tagSavesCount*100)+'%');
-						progressSub.find(".progresstitle").text("Removing tag '"+currentTagText+"' from save "+saveId+" ("+(tagSavesCount-tagSaves.length)+"/"+tagSavesCount+")");
-						$.get(tptenhance.removeTagUrl(currentTagText,saveId), fetchedSaveTag);
-					}
-					fetchedSaveTag = function(){
-						tagRemoveTimeout = setTimeout(startSaveTag, interval);
-					}
-					startTag();
+					$(this).remove();//remove the button
+					var container = $('<div></div>');
+					$("div.Tag").first().before(container);
+					var tagRemover = new tptenhance.tags.RemoveAllTagsByUser(container, $("div.Tag"), tptenhance.getPageUsername());
+					tagRemover.start();
 				});
 			}
 			$(".BanHistory ul").each(function(){
+				// Spelling...
 				$(this).html($(this).html().replace(/Permenantly/, "Permanently"));
 			});
 			$("span.TagText").on('click', function(){
-				tptenhance.tagsTooltip($(this), $(this).text());
+				var currentUsername = $('.SubmenuTitle').text();
+				tptenhance.tags.tagInfoPopup.showAll($(this), $(this).text(), currentUsername);
 			});
-			$("div.Tag .DelButton").attr('title', 'Disable');// A clearer tooltip
-			$("div.Tag .DelButton").on('click', tptenhance.tags.disableButtonClick);
-			// ajax for deleting comments
-			var modPageRequest = false, modPageRequestNeeded = false;
-			var clickFn;
-			clickFn = function(e){
-				e.preventDefault();
-				if (tptenhance.commentDeleteWaiting>0) modPageRequestNeeded = true;
-				tptenhance.commentDeleteWaiting++;
-				var post = $(this).parents('.Post');
-				var info = $(tptenhance.deletingHtml);
-				$(this).parents('.Actions').replaceWith(info);
-				url = this.href;
-				if (modPageRequestNeeded) url = url.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(tptenhance.dummyUrl));
-				else url = url.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent((''+self.location).replace(/^http:\/\/powdertoy.co.uk/, '')));
-				if (modPageRequest !== false) modPageRequest.abort();
-				modPageRequest = false;
-				$.get(url, function(data){
-					tptenhance.commentDeleteWaiting--;
-					post.css('color','#AAA');
-					info.replaceWith('<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong></span></div>');
-					if (tptenhance.commentDeleteWaiting==0)
-					{
-						if (modPageRequestNeeded)
-						{
-							if (modPageRequest !== false) modPageRequest.abort();
-							modPageRequest = $.get(window.location, function(data){
-								var comments = $(data).find(".MessageList");
-								if (comments.length)
-								{
-									post.parents(".MessageList").replaceWith(comments);
-									$(".Actions a").each(function(){
-										if (this.href.indexOf('DeleteComment=')!=-1)
-											$(this).click(clickFn);
-									});
-								}
-								modPageRequestNeeded = false;
-								modPageRequest = false;
-							}, "html");
-						}
-						else
-						{
-							var comments = $(data).find(".MessageList");
-							if (comments.length)
-							{
-								post.parents(".MessageList").replaceWith(comments);
-								$(".Actions a").each(function(){
-									if (this.href.indexOf('DeleteComment=')!=-1)
-										$(this).click(clickFn);
-								});
-							}
-						}
-					}
-				});
-			}
-			$(".Actions a").each(function(){
-				if (this.href.indexOf('DeleteComment=')!=-1)
-				{
-					$(this).click(clickFn);
-					$(this).attr('href', $(this).attr('href').replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent((''+self.location).replace(/^http:\/\/powdertoy.co.uk/, ''))));
-				}
-			});
+			tptenhance.tags.attachHandlers($("div.Tag"));
+
+			tptenhance.comments.commentView = new tptenhance.comments.CommentView($(".Subpage"));
 			
 			/*
 			 * Existing submit hook:
@@ -1098,6 +1568,7 @@ contentEval(function(){
 				}, "json");
 				if (tptenhance.isMod())
 				{
+					// Add links to the old user post/topic search pages
 					var username = $(".Pageheader .SubmenuTitle").text();
 					$(".MoreInfoForum a").each(function(){
 						if ($(this).text().indexOf("replies by")>-1)
@@ -1119,14 +1590,16 @@ contentEval(function(){
 	}
 	if (window.location.toString().indexOf("/Browse/View.html")!=-1)
 	{
-		window.lastComments = window.location.toString();
 		$(document).ready(function(){
 			setTimeout(function(){
+				$(".Pagination a").die('click');
+				tptenhance.comments.commentView = new tptenhance.comments.CommentView($(".Subpage"));
+
 				$("span.Tag").die('click');
 				if (tptenhance.isMod())
 				{
 					$("span.Tag").on('click', function(){
-						tptenhance.tagTooltip($(this), $(this).text(), currentSaveID);
+						tptenhance.tags.tagInfoPopup.showSingle($(this), $(this).text(), currentSaveID);
 					});
 
 					var tabs = $('<ul class="nav nav-pills"></ul>');
@@ -1135,7 +1608,7 @@ contentEval(function(){
 					var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO: remove all tags button, click on tags in table to show other uses, remove all instances of tag button
 					var bumpsTab = $('<li class="item"><a href="">Bumps</a></li>').appendTo(tabs);
 					var searchesTab = $('<li class="item"><a href="">Search similar</a></li>').appendTo(tabs);
-					var signsTab = $('<li class="item"><a href="">Signs</a></li>').appendTo(tabs);
+					var detailTab = $('<li class="item"><a href="">More info</a></li>').appendTo(tabs);
 
 					var tagsTable = false;
 					var currentTabLink = false;
@@ -1145,11 +1618,12 @@ contentEval(function(){
 						{
 							tptenhance.saveDetailsTabContent.find("table").detach();
 						}
-						currentTabLink = $(newTabLink).find("a");
+						currentTabLink = $(newTabLink);
 						tabs.find("li.active").removeClass("active");
 						$(newTabLink).parent().addClass("active");
 						//$("#VoteGraph").hide();
 						tptenhance.saveDetailsTabContent.empty();
+						setTimeout(tptenhance.tags.tagInfoPopup.updatePosition,1);
 					};
 
 					/*var votesShown = false;
@@ -1164,6 +1638,8 @@ contentEval(function(){
 					reportsTab.find("a").on("click", function(e){
 						tabSwitch(this);
 						$.get(tptenhance.reports.viewReportUrl(currentSaveID), function(html){
+							if (currentTabLink.text()!==reportsTab.find("a").text())
+								return;
 							tptenhance.saveDetailsTabContent.empty();
 							var reports = tptenhance.reports.parseViewReport(html);
 							var msgList = $('<ul class="MessageList"></ul>');
@@ -1177,7 +1653,7 @@ contentEval(function(){
 									msg.find(".Message").text(report.Message);
 									msgList.append(msg);
 								});
-								tptenhance.makeSaveLinks(msgList.find(".Post .Message"));
+								tptenhance.makeSaveLinks(msgList.find(".Post .Message"), true);
 								tptenhance.saveDetailsTabContent.append(msgList);
 							}
 							else
@@ -1185,6 +1661,7 @@ contentEval(function(){
 								$('<div class="alert alert-success" style="margin-top: 10px;">This save has never been reported.</div>').appendTo(tptenhance.saveDetailsTabContent);
 							}
 							reportsTab.find("a").text("Reports ("+reports.length+")");
+							tptenhance.tags.tagInfoPopup.updatePosition();
 						}, "html");
 						e.preventDefault();
 					});
@@ -1193,65 +1670,16 @@ contentEval(function(){
 						tptenhance.saveDetailsTabContent.empty();
 						if (tagsTable==false)
 						{
-							var actionClickFunc = function(e){
-								e.preventDefault();
-								var url = this.href;
-								var that = $(this);
-								var pendingIndicator;
-								if (that.text()=="Disable")
-									pendingIndicator = $('<span><span class="label label-info" title="Disabling..."><i class="icon-refresh icon-white"></i></span></span>');
-								else
-									pendingIndicator = $('<span><span class="label label-info" title="Removing..."><i class="icon-refresh icon-white"></i></span></span>');
-								that.replaceWith(pendingIndicator);
-								$.get(url,function(){
-									pendingIndicator.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white"></i> <strong>Done</strong></span></span></span>');
-								});
-							};
-							tagsTable = $('<table cellspacing="0" cellpadding="0" class="TagsTable"><thead><tr><th>Tag</th><th>Username</th><th>&nbsp;</th></tr></thead><tbody></tbody></table>');
-							var pendingTags = [];
-							var pendingTagsFetchTimeout = false;
-							var pendingTagStart, pendingTagFetched;
-							var currentFetchTag = false;
-							pendingTagStart = function()
-							{
-								if (!pendingTags.length)
-									return;
-								currentFetchTag = pendingTags.shift();
-								var getLocation = "/Browse/Tag.xhtml?Tag="+encodeURIComponent(currentFetchTag.text)+"&SaveID="+encodeURIComponent(currentSaveID);
-								$.get(getLocation, pendingTagFetched, "html");
-							}
-							pendingTagFetched = function(data)
-							{
-								currentFetchTag.userCell.empty();
-								currentFetchTag.userCell.append($(data).filter("div.TagInfo").find("a").first());
-								pendingTagsFetchTimeout = setTimeout(pendingTagStart, 500);
-							}
-							var tagsTableBody = tagsTable.find("tbody");
-							$(".SaveTags .Tag").each(function(){
-								var tableRow = $('<tr></tr>');
-								var tagText = $(this).text();
-								var tagTextCell = $('<td></td>').text(tagText).appendTo(tableRow);
-								var usernameCell = $('<td>Loading...</td>').appendTo(tableRow);
-								var actionsCell = $('<td class="TagActions"></td>').appendTo(tableRow);
-								$('<a title="Remove tag from this save">Remove</a>')
-									.attr('href',tptenhance.removeTagUrl(tagText,currentSaveID))
-									.on('click', actionClickFunc)
-									.appendTo(actionsCell);
-								$('<a title="Disable tag">Disable</a>')
-									.attr('href',tptenhance.disableTagUrl(tagText)+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl))
-									.on('click', actionClickFunc)
-									.appendTo(actionsCell);
-								tagsTableBody.append(tableRow);
-								pendingTags.push({row:tableRow, userCell:usernameCell, text:tagText});
-							});
-							pendingTagStart();
+							tagsTable = new tptenhance.tags.SaveTagsTable($(".SaveTags .Tag"));
 						}
-						tptenhance.saveDetailsTabContent.append(tagsTable);
+						tptenhance.saveDetailsTabContent.append(tagsTable.tableElem);
 						e.preventDefault();
 					});
 					bumpsTab.find("a").on("click", function(e){
 						tabSwitch(this);
 						$.get(tptenhance.saves.infoJsonUrlPTT(currentSaveID), function(data){
+							if (currentTabLink.text()!==bumpsTab.find("a").text())
+								return;
 							tptenhance.saveDetailsTabContent.empty();
 							var bumpList = $('<div style="text-align:center;"></div>');
 							data.BumpTimes.sort(function(a,b){return b-a});
@@ -1273,20 +1701,61 @@ contentEval(function(){
 								bumpList.text('No record found of this save ever being published');
 							}
 							tptenhance.saveDetailsTabContent.append(bumpList);
+							tptenhance.tags.tagInfoPopup.updatePosition();
 						}, "json");
 						e.preventDefault();
 					});
-					signsTab.find("a").on("click", function(e){
+					detailTab.find("a").on("click", function(e){
 						tabSwitch(this);
 						$.get(tptenhance.saves.infoDetailedJsonUrlPTT(currentSaveID), function(data){
+							if (currentTabLink.text()!==detailTab.find("a").text())
+								return;
 							tptenhance.saveDetailsTabContent.empty();
 							if (typeof data.Error!="undefined")
 							{
 								tptenhance.saveDetailsTabContent.append($("<div></div>").addClass("alert alert-error").text(data.Error));
 							}
+							else if (data=="")
+							{
+								tptenhance.saveDetailsTabContent.append($("<div></div>").addClass("alert alert-error").text("Error while fetching save info"));
+							}
 							else
 							{
-								var container = $('<div style="text-align:center;">(data may be up to 5 minutes old)<br><br></div>');
+								var container;
+								container = $('<div><div class="ElemCountChart"></div></div>');
+								var elemsChart = d3.select(container.find(".ElemCountChart").get(0));
+								var totalCount = d3.sum(data.ElementCount, function(d) { return d.Count; });
+								elemsChart.selectAll("div.bar")
+								.data(data.ElementCount.sort(function(a,b){return d3.descending(a.Count,b.Count);}))
+								.enter()
+								.append("div")
+								.classed("bar", true)
+								.style("width", function(d){return (d.Count/totalCount*100)+"%";})
+								.style("background-color", function(d){return (typeof d.Colour!="undefined") ? "#"+d.Colour : "#000"; })
+								.style("color", function(d){
+									if (typeof d.Colour=="undefined")
+										return "#FFF";
+									//2*r + 3*g + b
+									if (2*parseInt(d.Colour.substring(0,2),16) + 3*parseInt(d.Colour.substring(2,4),16) + parseInt(d.Colour.substring(4,6),16) > 544)
+										return "#000";
+									else
+										return "#FFF";
+								})
+								.each(function(d){
+									var nametxt;
+									if (typeof d.Name!="undefined")
+										nametxt = d.Name;
+									else
+										nametxt = d.Identifier;
+									var tooltiptxt = nametxt+": "+d.Count+" ";
+									tooltiptxt += (d.Count===1) ? "particle" : "particles";
+									$(this).tooltip({title:tooltiptxt, placement:"top"});
+									$(this).append($("<span class=\"barlabel\"></span>").text(nametxt));
+								});
+								elemsChart.append("div").classed("Clear", true);
+								tptenhance.saveDetailsTabContent.append(container);
+
+								container = $('<div style="text-align:center;"><div class="SaveDetails-notifyOld">(data may be up to 5 minutes old)</div></div>');
 								var signsTbl = $('<table cellspacing="0" cellpadding="0" style="margin:0 auto;" class="SignsTbl"><thead><tr><th>Position</th><th>Displayed text</th><th>Sign type</th></tr></thead><tbody></tbody></table>')
 								var signsTblBody = signsTbl.find('tbody');
 								data.Signs.sort(function(a,b){return a.PlacementY*10000-b.PlacementY*10000+a.PlacementX-b.PlacementX});
@@ -1340,12 +1809,9 @@ contentEval(function(){
 									});
 									container.append(signsTbl);
 								}
-								else
-								{
-									container.text('No signs found (data may be up to 5 minutes old)');
-								}
 								tptenhance.saveDetailsTabContent.append(container);
 							}
+							tptenhance.tags.tagInfoPopup.updatePosition();
 						}, "json");
 						e.preventDefault();
 					});
@@ -1385,9 +1851,9 @@ contentEval(function(){
 					tptenhance.saveDetailsTabContent = $('<div></div>').appendTo(newDetailsPane);
 				}
 				$(".AddComment .OtherF textarea").attr("maxlength", 500);
-				tptenhance.attachSaveCommentHandlers();
 			},1);
 			$(".SaveDetails .Warning").addClass("alert alert-error").css("margin-bottom", "5px");
+			tptenhance.makeSaveLinks($(".SaveDescription"));
 			window.showSaveVotes = tptenhance.saves.showVotes;
 		});
 	}
@@ -1397,7 +1863,7 @@ contentEval(function(){
 			setTimeout(function(){
 				$("span.TagText").die('click');
 				$("span.TagText").on('click', function(){
-					tptenhance.tagsTooltip($(this), $(this).text());
+					tptenhance.tags.tagInfoPopup.showAll($(this), $(this).text());
 				});
 				tptenhance.tags.attachHandlers($("div.Tag"));
 			},1);
@@ -1494,6 +1960,7 @@ contentEval(function(){
 			// submit form via Ajax request then redirect to the correct page ourselves
 			$('.FullForm').on('submit', function(e){
 				e.preventDefault();
+				$(this).find(".btn.btn-primary").addClass("disabled").attr("value", "Hiding...");
 				var formData = $(this).serialize();
 				formData += "&Hide_Hide=Hide+Post";
 				$.post($(this).attr('action'), formData, function(){
@@ -1616,7 +2083,7 @@ contentEval(function(){
 				});
 				return false;
 			});
-			var groupId = tptenhance.getCurrentGroupId();
+			var groupId = tptenhance.groups.currentGroupId();
 			$(".Post a").each(function(){
 				if ($(this).text()!="(View Post)") return;
 				var matches = $(this).attr('href').match(/\/Discussions\/Thread\/View.html\?Post=([0-9]+)$/);
@@ -1641,7 +2108,7 @@ contentEval(function(){
 	if (window.location.toString().indexOf("/Reports/View.html")!=-1)
 	{
 		$(document).ready(function(){
-			tptenhance.makeSaveLinks($(".Post .Message"));
+			tptenhance.makeSaveLinks($(".Post .Message"), true);
 		});
 	}
 	if (window.location.toString().indexOf("/Reports.html")!=-1)
@@ -1712,7 +2179,7 @@ contentEval(function(){
 	{
 		$(document).ready(function(){
 			var usernameElem = $(".SubmenuTitle");
-			if (usernameElem.length || 1)
+			if (usernameElem.length)
 			{
 				var tabElem = $('<li class=\"item\"><a>Published</a></li>');
 				tabElem.find("a").attr("href", "/Browse.html?Search_Query=user:"+encodeURIComponent(usernameElem.text()));
@@ -1724,8 +2191,7 @@ contentEval(function(){
 	// Correct repository username for github button, so that number of stars displays correctly
 	if ($(".social-github iframe").length)
 		$(".social-github iframe").attr("src", $(".social-github iframe").attr("src").replace("FacialTurd", "simtr"));
-	
-	}
+
 });
 
 function addCss(cssString)
@@ -1777,13 +2243,23 @@ addCss('\
 .tag-removedall { text-decoration: line-through; background-color:#fed; }\
 .progresstitle { font-size:10px; margin-bottom:4px; }\
 .TagsTable .TagActions a, .TagsTable .TagActions > span { margin:0 5px; min-width:50px; display:inline-block; text-align:center; }\
+.TagsTable .TagActions a.hide { display:none; }\
 .TagsTable { margin:0 auto; border:1px solid #CCC; }\
 .TagsTable td, .TagsTable th { padding:3px 6px; border:1px solid #CCC}\
 .TagsTable th { text-align:left; background-color:#DDD; }\
 .TagsTable td:nth-child(1) { min-width:100px; }\
 .TagsTable td:nth-child(2) { min-width:100px; }\
+.ElemCountChart { display:flex; flex-direction:row; margin:10px 0; border:1px solid #CCC; }\
+.ElemCountChart .bar { flex:1 1 auto; min-width:2px; box-sizing:border-box; overflow:hidden; text-align:center; }\
+.ElemCountChart .barlabel { padding:2px; }\
+.SaveDetails-notifyOld { text-align:center; margin:10px 0;}\
+.TagInfo .Tag-LinkDisable, .TagInfo .Tag-LinkEnable { margin:0 10px; }\
+.TagPopup-showOthers { text-align:right; clear:right; }\
+.Post.Deleting { }\
+.Post.Deleted { opacity:0.7;text-decoration:line-through; }\
+\
 ');
-if (window.location.toString().indexOf("/Groups/")!=-1)
+if (window.location.toString().indexOf("/Groups/")!==-1)
 {
 	addCss('\
 .TopicList li .TopicPages { width:auto; }\
@@ -1809,7 +2285,7 @@ ul.MessageList li.Post:hover div.Meta span.Actions2 a { visibility:visible; }\
 \
 ');
 }
-if (window.location.toString().indexOf("/Reports.html")!=-1)
+if (window.location.toString().indexOf("/Reports.html")!==-1)
 {
 	addCss('\
 .container { background: none repeat scroll 0 0 rgba(0, 0, 0, 0); border: medium none; padding: 0; }\
@@ -1834,7 +2310,7 @@ if (window.location.toString().indexOf("/Reports.html")!=-1)
 \
 ');
 }
-if (window.location.toString().indexOf("/Reports")!=-1)
+if (window.location.toString().indexOf("/Reports")!==-1)
 {
 	addCss('\
 .main-menu .pull-left li a[href="/Reports.html"] { display: none; }\
