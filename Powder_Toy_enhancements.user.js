@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.35
+// @version		2.36
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
@@ -29,7 +29,7 @@ function contentEval(source) {
   script.setAttribute("type", "application/javascript");
   script.textContent = source;
   document.body.appendChild(script);
-  //document.body.removeChild(script);
+  document.body.removeChild(script);
 }
 
 function addScript(url) {
@@ -406,38 +406,45 @@ var tptenhance_init = function(){
 			}
 		},
 		saves:{
+			dataUrl:function(id, historyVersion)
+			{
+				if (typeof historyVersion=="undefined" || !historyVersion)
+					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+".cps";
+				else
+					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+".cps";
+			},
 			smallerImgUrl:function(id, historyVersion) // 153px × 96px
 			{
 				// TODO: historyVersion?
-				if (typeof historyVersion=="undefined")
+				if (typeof historyVersion=="undefined" || !historyVersion)
 					return "/GetScreenshot.util?ID="+encodeURIComponent(id)+"&Size=small";
 				else
 					return tptenhance.saves.smallImgUrl(id, historyVersion);
 			},
 			smallImgUrl:function(id, historyVersion) // 204px × 128px
 			{
-				if (typeof historyVersion=="undefined" && historyVersion)
+				if (typeof historyVersion=="undefined" || !historyVersion)
 					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_small.png";
 				else
 					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+"_small.png";
 			},
 			fullImgUrl:function(id, historyVersion) // 612px × 384px
 			{
-				if (typeof historyVersion=="undefined" && historyVersion)
+				if (typeof historyVersion=="undefined" || !historyVersion)
 					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+".png";
 				else
 					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+".png";
 			},
 			viewUrl:function(id, historyVersion)
 			{
-				if (typeof historyVersion=="undefined" && historyVersion)
+				if (typeof historyVersion=="undefined" || !historyVersion)
 					return "/Browse/View.html?ID="+encodeURIComponent(id);
 				else
 					return "/Browse/View.html?ID="+encodeURIComponent(id)+"&Date="+encodeURIComponent(historyVersion);
 			},
 			infoJsonUrl:function(id, historyVersion)
 			{
-				if (typeof historyVersion=="undefined" && historyVersion)
+				if (typeof historyVersion=="undefined" || !historyVersion)
 					return "/Browse/View.json?ID="+encodeURIComponent(id);
 				else
 					return "/Browse/View.json?ID="+encodeURIComponent(id)+"&Date="+encodeURIComponent(historyVersion);
@@ -2122,7 +2129,8 @@ var tptenhance_init = function(){
 			if (saveVersion)
 			{
 				$(".SaveGamePicture img").attr("src", tptenhance.saves.fullImgUrl(currentSaveID, saveVersion));
-				// TODO: fix open and download links, and make it more obvious that this is an old version of the save
+				$("#SaveToComputerButton").attr("href", tptenhance.saves.dataUrl(currentSaveID, saveVersion));
+				// TODO: fix open link, and make it more obvious that this is an old version of the save
 			}
 		});
 	}
