@@ -3,32 +3,57 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.34
+// @version		2.35
+// @author		jacksonmj
+// @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
 // @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
 
+
+/* jshint forin:true, freeze:true, latedef:true, multistr:true, shadow:inner, undef:true, unused:true */
+
+/* global tptenhance, d3, moment */
+/* jshint jquery:true, browser:true */
+/* global alert, confirm */
+/* global currentSaveID:false */ // defined by powdertoy.co.uk in Browse/View.html
+/* global ProcessMessages, LoadForumBlocks, WYSIWYG */ // powdertoy.co.uk functions which are overridden by this script
+
+
 // contentEval, from http://userscripts.org/scripts/source/100842.user.js :
 function contentEval(source) {
   if ('function' == typeof source) {
-    source = '(' + source + ')();'
+	source = '(' + source + ')();';
   }
   var script = document.createElement('script');
   script.setAttribute("type", "application/javascript");
   script.textContent = source;
   document.body.appendChild(script);
-  document.body.removeChild(script);
+  //document.body.removeChild(script);
 }
 
+function addScript(url) {
+  var script = document.createElement('script');
+  script.setAttribute("type", "application/javascript");
+  script.setAttribute("src", url);
+  document.body.appendChild(script);
+}
 
 
 // Fix silly way of checking whether facebook stuff is loaded (Browse.View.js:3, "if(FB)")
 // If facebook is blocked, then the javascript on powdertoy.co.uk errors and does not execute important stuff like callbacks for showing tag info popups
 contentEval('if (typeof window.FB == "undefined") window.FB = false;');
 
+addScript("//cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.2/moment.min.js");
+
 contentEval(function(){
-	if (typeof $ == "undefined") // check jQuery has loaded
+var tptenhance_init = function(){
+
+	if (typeof $ == "undefined" || typeof moment == "undefined") // check jQuery and other libraries have loaded
+	{
+		setTimeout(tptenhance_init, 1000);
 		return;
+	}
 
 	window.tptenhance = {
 
@@ -39,8 +64,6 @@ contentEval(function(){
 		// a random page to use for redirects, which will hopefully load faster than the default redirect (e.g. to a user moderation page) in ajax requests
 		dummyUrl:"/Themes/Next/Javascript/Browse.View.js",
 
-		monthNamesShort:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
-
 		// Return session key (the thing used as CSRF protection) - cached in tptenhance.sessionKey
 		getSessionKey:function()
 		{
@@ -49,7 +72,7 @@ contentEval(function(){
 
 			$('.main-menu').find('a').each(function(){
 				var url = this.href;
-				var matches = url.match(/Logout.html\?Key=[A-Za-z0-9]+/)
+				var matches = url.match(/Logout.html\?Key=[A-Za-z0-9]+/);
 				if (matches)
 				{
 					// Logout link found, extract key
@@ -89,11 +112,11 @@ contentEval(function(){
 				{
 					$(this).click(function(e){
 						e.preventDefault();
-						$(this).addClass("disabled btn-primary")
+						$(this).addClass("disabled btn-primary");
 						$.get(this.href);
 						var newElement = $(this).parents('.Comment').children('.Message');
-						postID = newElement.attr('id').split("-")[1];
-						$.get("/Discussions/Thread/Post.json?Post="+postID, function(data){
+						var postID = newElement.attr('id').split("-")[1];
+						$.get("/Discussions/Thread/Post.json?Post="+postID, function(){
 							location.reload(true);
 							// TODO: reload like http://powdertoy.co.uk/Applications/Application.Discussions/Javascript/Thread.js $(".Pagination a") click does
 						});
@@ -101,6 +124,7 @@ contentEval(function(){
 				}
 			});
 		},
+
 		comments:
 		{
 			deleteUrl:function(commentId, saveId)
@@ -273,9 +297,9 @@ contentEval(function(){
 			// 'messages' should be the jQuery elements to process, contents should be plain text
 			var regex;
 			if (typeof convertAllNumbers!="undefined" && convertAllNumbers)
-				regex = /\b(?:(?:id|save|saveid|~)[^\d\w]?[\s]*)?[0-9]+\b/gi;
+				regex = /(?:~|\b(?:(?:id|save|saveid)[^\d\w]?)[\s]*)?[0-9]+\b/gi;
 			else
-				regex = /\b(?:(?:id|save|saveid|~)[^\d\w]?[\s]*)[0-9]+\b/gi;
+				regex = /(?:~|\b(?:(?:id|save|saveid)[^\d\w]?)[\s]*)[0-9]+\b/gi;
 			messages.each(function(){
 				var msg = $(this);
 				var text = msg.text();
@@ -283,7 +307,7 @@ contentEval(function(){
 
 				var result, prevLastIndex = 0;
 				regex.lastIndex = 0;
-				while (result=regex.exec(text))
+				while ((result=regex.exec(text)))
 				{
 					// Append the text before the match
 					msg.append($('<span></span>').text(text.slice(prevLastIndex, result.index)));
@@ -325,7 +349,7 @@ contentEval(function(){
 			{
 				return "/Reports.html?Unpublish="+encodeURIComponent(id);
 			},
-			/* current 
+			/* current
 			 * <span class="badge badge-info">16</span>
 
 
@@ -358,7 +382,7 @@ contentEval(function(){
 						UserAvatar:reasonHtml.find(".Meta .Author img").attr("src"),
 						UserID:reasonHtml.find(".Meta .Author a:last-child").attr("href").match(/ID=[0-9]+/)[0].split("=")[1],
 						UserName:reasonHtml.find(".Meta .Author a:last-child").text().trim(),
-						ReportDate:reasonHtml.find(".Meta .Date").text().trim(), 
+						ReportDate:reasonHtml.find(".Meta .Date").text().trim(),
 						Message:reasonHtml.find(".Message").text().trim()
 					});
 				});
@@ -382,25 +406,41 @@ contentEval(function(){
 			}
 		},
 		saves:{
-			smallerImgUrl:function(id) // 153px × 96px
+			smallerImgUrl:function(id, historyVersion) // 153px × 96px
 			{
-				return "/GetScreenshot.util?ID="+encodeURIComponent(id)+"&Size=small";
+				// TODO: historyVersion?
+				if (typeof historyVersion=="undefined")
+					return "/GetScreenshot.util?ID="+encodeURIComponent(id)+"&Size=small";
+				else
+					return tptenhance.saves.smallImgUrl(id, historyVersion);
 			},
-			smallImgUrl:function(id) // 204px × 128px
+			smallImgUrl:function(id, historyVersion) // 204px × 128px
 			{
-				return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_small.png";
+				if (typeof historyVersion=="undefined" && historyVersion)
+					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_small.png";
+				else
+					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+"_small.png";
 			},
-			fullImgUrl:function(id) // 612px × 384px
+			fullImgUrl:function(id, historyVersion) // 612px × 384px
 			{
-				return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+".png";
+				if (typeof historyVersion=="undefined" && historyVersion)
+					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+".png";
+				else
+					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+".png";
 			},
-			viewUrl:function(id)
+			viewUrl:function(id, historyVersion)
 			{
-				return "/Browse/View.html?ID="+encodeURIComponent(id);
+				if (typeof historyVersion=="undefined" && historyVersion)
+					return "/Browse/View.html?ID="+encodeURIComponent(id);
+				else
+					return "/Browse/View.html?ID="+encodeURIComponent(id)+"&Date="+encodeURIComponent(historyVersion);
 			},
-			infoJsonUrl:function(id)
+			infoJsonUrl:function(id, historyVersion)
 			{
-				return "/Browse/View.json?ID="+encodeURIComponent(id);
+				if (typeof historyVersion=="undefined" && historyVersion)
+					return "/Browse/View.json?ID="+encodeURIComponent(id);
+				else
+					return "/Browse/View.json?ID="+encodeURIComponent(id)+"&Date="+encodeURIComponent(historyVersion);
 			},
 			infoJsonUrlPTT:function(id)
 			{
@@ -410,6 +450,10 @@ contentEval(function(){
 			{
 				return "http://powdertoythings.co.uk/Powder/Saves/ViewDetailed.json?ID="+encodeURIComponent(id);
 			},
+			historyJsonUrl:function(id)
+			{
+				return "/Browse.json?Search_Query=history%3A"+encodeURIComponent(id)+"&Start=0&Count=100";
+			},
 			voteMapUrl:function(id)
 			{
 				return "/IPTools.html?Save="+encodeURIComponent(id);
@@ -418,93 +462,100 @@ contentEval(function(){
 			{
 				return "/IPTools/SaveVoteData.json?ID="+encodeURIComponent(id);
 			},
+			getCurrentHistoryVersion:function()
+			{
+				var matches = window.location.toString().match(/Date=([0-9]+)/);
+				if (matches && matches.length)
+					return +matches[1];
+				else
+					return null;
+			},
+			tabs:{},
 			showVotes:function()
 			{
 				// some of this function is copied from the JS on the website
 
 				var m = [40, 40, 20, 20],
-				    w = 612 - m[1] - m[3],
-				    h = 300 - m[0] - m[2],
-				    parse = d3.time.format("%Y-%m-%d").parse,
-				    format = d3.time.format("%Y");
-				
+					w = 612 - m[1] - m[3],
+					h = 300 - m[0] - m[2];
+
 				// Scales. Note the inverted domain for the y-scale: bigger is up!
 				var x = d3.time.scale().range([0, w]),
-				    y = d3.scale.linear().range([h, 0]),
-				    xAxis = d3.svg.axis().scale(x).orient("bottom").tickSize(-h, 0).tickPadding(6),
-				    yAxis = d3.svg.axis().scale(y).orient("right").tickSize(-w).tickPadding(6);
-				
+					y = d3.scale.linear().range([h, 0]),
+					xAxis = d3.svg.axis().scale(x).orient("bottom").tickSize(-h, 0).tickPadding(6),
+					yAxis = d3.svg.axis().scale(y).orient("right").tickSize(-w).tickPadding(6);
+
 				// An area generator.
 				var area = d3.svg.area()
-				    .interpolate("step-after")
-				    .x(function(d) { return x(d.date); })
-				    .y0(function(d) { return y((d.value<0)?d.value:0); })
-				    .y1(function(d) { return y((d.value>0)?d.value:0); });
-				
+					.interpolate("step-after")
+					.x(function(d) { return x(d.date); })
+					.y0(function(d) { return y((d.value<0)?d.value:0); })
+					.y1(function(d) { return y((d.value>0)?d.value:0); });
+
 				// A line generator.
 				var line = d3.svg.line()
-				    .interpolate("step-after")
-				    .x(function(d) { return x(d.date); })
-				    .y(function(d) { return y(d.value); });
-				
+					.interpolate("step-after")
+					.x(function(d) { return x(d.date); })
+					.y(function(d) { return y(d.value); });
+
 				var svg = d3.select("#VoteGraph").append("svg:svg")
-				    .attr("width", w + m[1] + m[3])
-				    .attr("height", h + m[0] + m[2])
+					.attr("width", w + m[1] + m[3])
+					.attr("height", h + m[0] + m[2])
 				  .append("svg:g")
-				    .attr("transform", "translate(" + m[3] + "," + m[0] + ")");
-				
+					.attr("transform", "translate(" + m[3] + "," + m[0] + ")");
+
 				var gradient = svg.append("svg:defs").append("svg:linearGradient")
-				    .attr("id", "gradient")
-				    .attr("x2", "0%")
-				    .attr("y2", "100%");
-				
+					.attr("id", "gradient")
+					.attr("x2", "0%")
+					.attr("y2", "100%");
+
 				gradient.append("svg:stop")
-				    .attr("offset", "0%")
-				    .attr("stop-color", "#9ecae1")
-				    .attr("stop-opacity", .5);
-				
+					.attr("offset", "0%")
+					.attr("stop-color", "#9ecae1")
+					.attr("stop-opacity", 0.5);
+
 				gradient.append("svg:stop")
-				    .attr("offset", "100%")
-				    .attr("stop-color", "#6baed6")
-				    .attr("stop-opacity", 1);
-				
+					.attr("offset", "100%")
+					.attr("stop-color", "#6baed6")
+					.attr("stop-opacity", 1);
+
 				svg.append("svg:clipPath")
-				    .attr("id", "clip")
+					.attr("id", "clip")
 				  .append("svg:rect")
-				    .attr("x", x(0))
-				    .attr("y", y(1))
-				    .attr("width", x(1) - x(0))
-				    .attr("height", y(0) - y(1));
-				
+					.attr("x", x(0))
+					.attr("y", y(1))
+					.attr("width", x(1) - x(0))
+					.attr("height", y(0) - y(1));
+
 				svg.append("svg:g")
-				    .attr("class", "y axis")
-				    .attr("transform", "translate(" + w + ",0)");
-				
+					.attr("class", "y axis")
+					.attr("transform", "translate(" + w + ",0)");
+
 				svg.append("svg:path")
-				    .attr("class", "area")
-				    .attr("clip-path", "url(#clip)")
-				    .style("fill", "url(#gradient)");
-				
+					.attr("class", "area")
+					.attr("clip-path", "url(#clip)")
+					.style("fill", "url(#gradient)");
+
 				svg.append("svg:g")
-				    .attr("class", "x axis")
-				    .attr("transform", "translate(0," + h + ")");
-				
+					.attr("class", "x axis")
+					.attr("transform", "translate(0," + h + ")");
+
 				svg.append("svg:path")
-				    .attr("class", "line")
-				    .attr("clip-path", "url(#clip)");
-				    
+					.attr("class", "line")
+					.attr("clip-path", "url(#clip)");
+
 				var voteLines = svg.append("svg:g");
-				    
+
 				var dupVLine;
-				
+
 				var rect = svg.append("svg:rect")
-				    .attr("class", "pane")
-				    .attr("width", w)
-				    .attr("height", h);
-				    //.call(d3.behavior.zoom().on("zoom", zoom));
-				
+					.attr("class", "pane")
+					.attr("width", w)
+					.attr("height", h);
+					//.call(d3.behavior.zoom().on("zoom", zoom));
+
 				d3.json(tptenhance.saves.voteDataJsonUrl(currentSaveID), function(data) {
-				
+
 				// Parse dates and numbers.
 				data.votes.forEach(function(d) {
 					d.date = new Date(d.date*1000);//parse(d.date);
@@ -542,12 +593,11 @@ contentEval(function(){
 						var tableRow = $('<tr></tr>');
 						var cell;
 						cell = $('<td><a></a></td>').addClass('Date').appendTo(tableRow);
-						var timeString = [('0'+d.Date.getHours()).slice(-2), ('0'+d.Date.getMinutes()).slice(-2), ('0'+d.Date.getSeconds()).slice(-2)].join(':');
-						cell.text([('0'+d.Date.getDate()).slice(-2), tptenhance.monthNamesShort[d.Date.getMonth()], d.Date.getFullYear(), timeString].join(' '));
+						cell.text(moment(d.Date).format("DD MMM YYYY HH:mm:ss"));
 						cell = $('<td><a></a></td>').addClass('Username').appendTo(tableRow);
 						cell.children().first().attr('href', tptenhance.users.moderationUrlById(d.UserID)).text(d.Username);
 
-						
+
 						// This is a bootstrap tooltip, not the jquery tooltip plugin
 						var hoverTimeout = false;
 						var hovered = false;
@@ -559,7 +609,7 @@ contentEval(function(){
 								hoverTimeout = false;
 							}
 						});
-						cell.on("mouseenter", function(evt, ui){
+						cell.on("mouseenter", function(){
 							hovered = true;
 							var that = $(this);
 							if (hoverTimeout===false)
@@ -569,7 +619,7 @@ contentEval(function(){
 									that.off("mouseenter");
 									tptenhance.users.getModerationInfoById(d.UserID, function(data){
 										var txt = "";
-										if (data.Banned && data.Bans[0].Duration==0) txt += "Perm banned";
+										if (data.Banned && data.Bans[0].Duration===0) txt += "Perm banned";
 										else
 										{
 											if (data.Banned)
@@ -579,7 +629,7 @@ contentEval(function(){
 												{
 													txt += ", "+(data.Bans.length-1)+" previous ban";
 													if (data.Bans.length>2) txt += "s";
-												}	
+												}
 											}
 											else
 											{
@@ -591,7 +641,7 @@ contentEval(function(){
 												}
 											}
 										}
-										
+
 										txt += "<br>";
 										if (!data.Comments.length && !data.Tags.length)
 											txt += "No tags or comments";
@@ -610,10 +660,10 @@ contentEval(function(){
 								}, 500);
 							}
 						});
-						
+
 						cell = $('<td><a></a></td>').addClass('IPAddress').appendTo(tableRow);
 						cell.children().first().attr('href', tptenhance.ipMapUrl(d.SourceAddress)).text(d.SourceAddress);
-						if (typeof ipcolours[d.SourceAddress] != "undefined" && ipcolours[d.SourceAddress] != "")
+						if (typeof ipcolours[d.SourceAddress] != "undefined" && ipcolours[d.SourceAddress] !== "")
 							cell.css('background-color', ipcolours[d.SourceAddress]);
 						cell = $('<td></td>').addClass('VoteType');
 						if (d.Vote==1) cell.html('<i class="VoteUpIcon icon-chevron-up icon-white"></i>');
@@ -662,8 +712,8 @@ contentEval(function(){
 				function voteMouseout() {
 					svg.selectAll(".active").classed("active", false);
 					//info.text(defaultInfo);
-				}				  
-				  
+				}
+
 				dupVLine = voteLines.selectAll("line.link")
 				.data(data.dupVotes);
 
@@ -693,16 +743,16 @@ contentEval(function(){
 				//.style("stroke-width", function(d) { return Math.sqrt(d.value); });
 
 				dupVLine.exit().remove();
-			
+
 		/*link.enter().insert("svg:line", ".node")
 			.attr("class", "link")
 			.style("stroke-width", function(d) { return Math.sqrt(d.value); });
-			
+
 		link.exit().remove();*/
-				
+
 				  draw();
 				});
-				
+
 				function draw() {
 					svg.select("g.x.axis").call(xAxis);
 					svg.select("g.y.axis").call(yAxis);
@@ -718,7 +768,7 @@ contentEval(function(){
 
 				// Using a timeout here to defer drawing seems to improve zooming in Firefox on slow computers
 				// Possibly multiple calls to zoom are issued simultaneously depending on the amount of
-				// scroll wheel movement, and unnecessary redraws occur. The setTimeout defers drawing, 
+				// scroll wheel movement, and unnecessary redraws occur. The setTimeout defers drawing,
 				// hopefully until after all zoom calls occur.
 				var zoomDrawTimeout = false;
 				function zoomDraw() {
@@ -836,16 +886,16 @@ contentEval(function(){
 		this.onTagRemoved = this.onTagRemoved.bind(this);
 		this.onTagDisabled = this.onTagDisabled.bind(this);
 		this.onTagEnabled = this.onTagEnabled.bind(this);
-	}
+	};
 	tptenhance.tags.TagInfoPopup.prototype.isOpen = function(){
 		return (!!this.targetElem);// return true if the popup is visible
-	}
+	};
 	tptenhance.tags.TagInfoPopup.prototype.normaliseTargetElem = function(elem){
 		elem = $(elem);
 		if (elem.hasClass("TagText"))
 			elem = elem.parents(".Tag");
 		return elem;
-	}
+	};
 	tptenhance.tags.TagInfoPopup.prototype.handleRemoveLinkClick = function(e){
 		var tagInfo = $(e.target).parents('div.TagInfo');
 		var saveId;
@@ -870,7 +920,6 @@ contentEval(function(){
 	};
 	tptenhance.tags.TagInfoPopup.prototype.onDisabledStateChange = function(newState){// newState=true means the tag is now disabled
 		this.tagDisabled = newState;
-		var tagElem = this.targetElem;
 		if (this.tagDisabled)
 		{
 			this.popupElem.find(".Tag-LinkDisable").addClass("hide");
@@ -885,10 +934,9 @@ contentEval(function(){
 			this.popupElem.find(".Tag-LinkEnable").addClass("hide");
 		}
 		this.popupElem.find(".Tag-placeholder-StatusChange").remove();
-	}
+	};
 
 	tptenhance.tags.TagInfoPopup.prototype.handleDisableLinkClick = function(e){
-		var tagInfo = $(e.target).parents('div.TagInfo');
 		var url = e.target.href;
 		var placeholder = $('<div class="pull-right label label-info Tag-LinkDisable Tag-placeholder-StatusChange"><i class="icon-refresh icon-white"></i> <strong>Disabling...</strong></div>');
 		placeholder.insertAfter(e.target);
@@ -900,7 +948,6 @@ contentEval(function(){
 		return false;
 	};
 	tptenhance.tags.TagInfoPopup.prototype.handleEnableLinkClick = function(e){
-		var tagInfo = $(e.target).parents('div.TagInfo');
 		var url = e.target.href;
 		var placeholder = $('<div class="pull-right label label-info Tag-LinkEnable Tag-placeholder-StatusChange"><i class="icon-refresh icon-white"></i> <strong>Enabling...</strong></div>');
 		placeholder.insertAfter(e.target);
@@ -929,26 +976,26 @@ contentEval(function(){
 				removeLink.replaceWith($(tptenhance.deletedHtml).addClass("Tag-LinkRemoved"));
 		});
 		setTimeout(this.updatePosition,1);
-	}
+	};
 	tptenhance.tags.TagInfoPopup.prototype.onTagDisabled = function(affectedTagText){
 		if (this.isOpen() && affectedTagText===this.selectedTagText)
 			this.onDisabledStateChange(true);
 		setTimeout(this.updatePosition,1);
-	}
+	};
 	tptenhance.tags.TagInfoPopup.prototype.onTagEnabled = function(affectedTagText){
 		if (this.isOpen() && affectedTagText===this.selectedTagText)
 			this.onDisabledStateChange(false);
 		setTimeout(this.updatePosition,1);
-	}
+	};
 
 	tptenhance.tags.TagInfoPopup.prototype.createRemoveLink = function(tagText, saveId){
 		var link = $('<a class="pull-right Tag-LinkRemove" title="Remove tag from this save">Remove</a>');
-		link.attr('href',tptenhance.tags.removeUrl(tagText,saveId))
+		link.attr('href',tptenhance.tags.removeUrl(tagText,saveId));
 		link.on('click', this.handleRemoveLinkClick);
 		return link;
-	}
+	};
 	tptenhance.tags.TagInfoPopup.prototype.createTagStatusLinks = function(tagText){
-		var container = $("<span></span>")
+		var container = $("<span></span>");
 		container.append(tptenhance.tags.createDisableLink(tagText)
 			.addClass("pull-right")
 			.on('click', this.handleDisableLinkClick)
@@ -958,7 +1005,7 @@ contentEval(function(){
 			.on('click', this.handleEnableLinkClick)
 		);
 		return container.children();
-	}
+	};
 
 	// Create a popup, with placeholder 'Loading...' text
 	tptenhance.tags.TagInfoPopup.prototype.create = function(targetElem){
@@ -971,10 +1018,11 @@ contentEval(function(){
 		this.tagDisabled = tptenhance.tags.isTagElemDisabled(this.targetElem);
 		this.popupElem = $('<div class="popover fade bottom in" style="display: block;"></div>');
 		this.popupElem.appendTo(document.body);
-		var arrow = $('<div class="arrow"></div>').appendTo(this.popupElem);
-		var inner = $('<div class="popover-inner"></div>').appendTo(this.popupElem);
-		var title = $('<h3 class="popover-title">Tag Info</h3>').appendTo(inner);
-		var content = $('<div class="popover-content">Loading...</div>').appendTo(inner);
+		var title = $('<h3 class="popover-title">Tag Info</h3>');
+		var content = $('<div class="popover-content">Loading...</div>');
+		var arrow = $('<div class="arrow"></div>');
+		var inner = $('<div class="popover-inner"></div>').append(title, content);
+		this.popupElem.append(arrow, inner);
 		this.updatePosition();
 		return content;
 	};
@@ -1021,16 +1069,16 @@ contentEval(function(){
 			showMore.appendTo(content);
 			showMore.find("a")
 				.attr('href',tptenhance.tags.searchUrl(tagText))
-				.on('click', function(e){
+				.on('click', function(){
 					that.remove();
-					that.showAll(targetElem, tagText)
+					that.showAll(targetElem, tagText);
 					return false;
 				});
 			that.updatePosition();
 			if (that.tagDisabled)
 				that.onDisabledStateChange(true);
 		}, "html");
-	}
+	};
 
 	// Toggle a popup to show all instances of a particular tag
 	// Optional argument sortUser: sorts tags so that tags placed by that username are at the top
@@ -1095,7 +1143,7 @@ contentEval(function(){
 	};
 	tptenhance.tags.TagInstanceRemover.prototype.push = function(tagText, saveId){
 		this.tags.push({tagText:tagText, saveId:saveId});
-	}
+	};
 	tptenhance.tags.TagInstanceRemover.prototype.start = function(){
 		this.tagsCount = this.tags.length;
 		this._tagStart();
@@ -1150,10 +1198,10 @@ contentEval(function(){
 	tptenhance.tags.RemoveAllTagsByUser.prototype._setProgress = function(elem, doneAmount, statusText){
 		elem.find(".bar").css('width', (doneAmount*100)+'%');
 		elem.find(".progresstitle").text(statusText);
-	}
+	};
 	tptenhance.tags.RemoveAllTagsByUser.prototype.setProgress = function(doneAmount, statusText){
 		this._setProgress(this.progressElem, doneAmount, statusText);
-	}
+	};
 	tptenhance.tags.RemoveAllTagsByUser.prototype.setProgressSub = function(doneAmount, statusText){
 		this._setProgress(this.progressSubElem, doneAmount, statusText);
 	};
@@ -1170,7 +1218,7 @@ contentEval(function(){
 		this.currentTag = this.tagsQueue.shift();
 		this.currentTagText = $(this.currentTag).find(".TagText").text();
 		this.setProgress(done/total, "Removing tag '"+this.currentTagText+"' ("+(done+1)+"/"+total+")");
-		this.setProgressSub(0, "Fetching save list for tag '"+this.currentTagText+"'")
+		this.setProgressSub(0, "Fetching save list for tag '"+this.currentTagText+"'");
 
 		this.currentXHR = $.get(tptenhance.tags.infoUrl(this.currentTagText), this.removeTag_fetched, "html");
 	};
@@ -1219,34 +1267,48 @@ contentEval(function(){
 
 
 	tptenhance.tags.SaveTagsTable = function(tagElems){
-		this.tagStart = this.tagStart.bind(this);
-		this.tagFetched = this.tagFetched.bind(this);
+		this.tagInfoStart = this.tagInfoStart.bind(this);
+		this.tagInfoFetched = this.tagInfoFetched.bind(this);
+		this.handleRemoveAllClick = this.handleRemoveAllClick.bind(this);
 		this.pendingRows = [];
 		this.fetchRow = false;
+		this.tagElems = tagElems;
 		this.tableElem = $('<table cellspacing="0" cellpadding="0" class="TagsTable"><thead><tr><th>Tag</th><th>Username</th><th>&nbsp;</th></tr></thead><tbody></tbody></table>');
 		var tbody = this.tableElem.find("tbody");
 		var that = this;
-		tagElems.each(function(){
+		this.tagElems.each(function(){
 			var row = new tptenhance.tags.SaveTagsTableRow(this);
 			if (!tptenhance.tags.isTagElemDisabled(this) && !tptenhance.tags.isTagElemRemoved(this))
 				that.pendingRows.push(row);
 			tbody.append(row.rowElem);
 		});
-		this.tagStart();
-	}
-	tptenhance.tags.SaveTagsTable.prototype.tagStart = function()
+		var removeAllLink = $('<a class="Tag-LinkRemove" title="Remove all tags from this save">Remove all</a>').on('click', this.handleRemoveAllClick);
+		this.tableElem.find("th:nth-child(3)").append(removeAllLink);
+		this.tagInfoStart();
+	};
+	tptenhance.tags.SaveTagsTable.prototype.tagInfoStart = function()
 	{
 		this.fetchTimeout = false;
 		if (!this.pendingRows.length)
 			return;
 		this.fetchRow = this.pendingRows.shift();
-		$.get(tptenhance.tags.infoUrl(this.fetchRow.tagText, currentSaveID), this.tagFetched, "html");
-	}
-	tptenhance.tags.SaveTagsTable.prototype.tagFetched = function(data)
+		$.get(tptenhance.tags.infoUrl(this.fetchRow.tagText, currentSaveID), this.tagInfoFetched, "html");
+	};
+	tptenhance.tags.SaveTagsTable.prototype.tagInfoFetched = function(data)
 	{
 		this.fetchRow.processFetchedInfo(data);
-		this.fetchTimeout = setTimeout(this.tagStart, 500);
-	}
+		this.fetchTimeout = setTimeout(this.tagInfoStart, 500);
+	};
+	tptenhance.tags.SaveTagsTable.prototype.handleRemoveAllClick = function(){
+		var pendingIndicator = $('<span class="Tag-LinkRemove Tag-placeholder-Remove"><span class="label label-info" title="Removing..."><i class="icon-refresh icon-white"></i></span></span>');
+		var tir = new tptenhance.tags.TagInstanceRemover();
+		this.tagElems.each(function(){
+			if (!tptenhance.tags.isTagElemDisabled(this) && !tptenhance.tags.isTagElemRemoved(this))
+				tir.push($(this).text(), currentSaveID);
+		});
+		this.tableElem.find("td .Tag-LinkRemove").addClass("hide").before(pendingIndicator);
+		tir.start();
+	};
 
 	tptenhance.tags.SaveTagsTableRow = function(tagElem){
 		this.handleRemoveLinkClick = this.handleRemoveLinkClick.bind(this);
@@ -1262,16 +1324,17 @@ contentEval(function(){
 		this.textCell = $('<td class="TagText"></td>').text(this.tagText).appendTo(this.rowElem);
 		this.userCell = $('<td>Loading...</td>').appendTo(this.rowElem);
 		this.actionsCell = $('<td class="TagActions"></td>').appendTo(this.rowElem);
-		this.removeLink = $('<a title="Remove tag from this save">Remove</a>')
+		this.removeLink = $('<a class="Tag-LinkRemove" title="Remove tag from this save">Remove</a>')
 			.attr('href',tptenhance.tags.removeUrl(this.tagText,currentSaveID))
 			.on('click', this.handleRemoveLinkClick);
-		this.disableLink = $('<a title="Disable tag">Disable</a>')
+		this.disableLink = $('<a class="Tag-LinkDisable" title="Disable tag">Disable</a>')
 			.attr('href',tptenhance.tags.disableUrl(this.tagText)+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl))
 			.on('click', this.handleDisableLinkClick);
-		this.enableLink = $('<a title="Enable tag">Enable</a>')
+		this.enableLink = $('<a class="Tag-LinkEnable" title="Enable tag">Enable</a>')
 			.attr('href',tptenhance.tags.enableUrl(this.tagText)+"&Redirect="+encodeURIComponent(tptenhance.dummyUrl))
 			.on('click', this.handleEnableLinkClick);
-		this.actionsCell.append(this.removeLink, this.disableLink, this.enableLink);
+		this.actionsCell.append(this.removeLink);
+		this.actionsCell.append(this.disableLink, this.enableLink);
 
 		if (tptenhance.tags.isTagElemDisabled(this.tagElem))
 			this.disableLink.addClass("hide");
@@ -1285,43 +1348,51 @@ contentEval(function(){
 		tptenhance.tags.tagRemovedCallbacks.add(this.onTagRemoved);
 		tptenhance.tags.tagDisabledCallbacks.add(this.onTagDisabled);
 		tptenhance.tags.tagEnabledCallbacks.add(this.onTagEnabled);
-	}
+	};
 	tptenhance.tags.SaveTagsTableRow.prototype.onTagRemoved = function(affectedTagText, affectedSaveId){
 		if (affectedSaveId==currentSaveID && affectedTagText===this.tagText)
 		{
+			this.actionsCell.find(".Tag-placeholder-Remove").remove();
 			this.removeLink.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white" title="Removed"></i></span></span></span>');
 		}
-	}
+	};
 	tptenhance.tags.SaveTagsTableRow.prototype.onTagDisabled = function(affectedTagText){
 		if (affectedTagText===this.tagText)
 		{
 			this.disableLink.addClass("hide");
 			this.enableLink.removeClass("hide");
+			this.actionsCell.find(".Tag-placeholder-StatusChange").remove();
+
+			this.actionsCell.find(".Tag-placeholder-Remove").remove();
+			this.removeLink.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white" title="Removed"></i></span></span></span>');
 		}
-	}
+	};
 	tptenhance.tags.SaveTagsTableRow.prototype.onTagEnabled = function(affectedTagText){
 		if (affectedTagText===this.tagText)
 		{
 			this.disableLink.removeClass("hide");
 			this.enableLink.addClass("hide");
+			this.actionsCell.find(".Tag-placeholder-StatusChange").remove();
 		}
-	}
+	};
 	tptenhance.tags.SaveTagsTableRow.prototype.processFetchedInfo = function(data){
 		this.userCell.empty();
 		this.userCell.append($(data).filter("div.TagInfo").find("a").first());
-	}
+	};
+
 	tptenhance.tags.SaveTagsTableRow.prototype.handleRemoveLinkClick = function(e){
-		var pendingIndicator = $('<span><span class="label label-info" title="Removing..."><i class="icon-refresh icon-white"></i></span></span>');
+		var pendingIndicator = $('<span class="Tag-placeholder-Remove"><span class="label label-info" title="Removing..."><i class="icon-refresh icon-white"></i></span></span>');
+		$(e.target).addClass("hide").before(pendingIndicator);
 		var url = e.target.href;
 		var that = this;
 		$.get(url,function(){
-			pendingIndicator.replaceWith('<span><span class="label label-success"><i class="icon-ok icon-white" title="Removed"></i></span></span></span>');
+			pendingIndicator.remove();
 			tptenhance.tags.tagRemovedCallbacks.fire(that.tagText, currentSaveID);
 		});
 		return false;
-	}
+	};
 	tptenhance.tags.SaveTagsTableRow.prototype.handleDisableLinkClick = function(e){
-		var pendingIndicator = $('<span><span class="label label-info" title="Disabling..."><i class="icon-refresh icon-white"></i></span></span>');
+		var pendingIndicator = $('<span class="Tag-placeholder-StatusChange"><span class="label label-info" title="Disabling..."><i class="icon-refresh icon-white"></i></span></span>');
 		$(e.target).addClass("hide").before(pendingIndicator);
 		var url = e.target.href;
 		var that = this;
@@ -1330,7 +1401,7 @@ contentEval(function(){
 			tptenhance.tags.tagDisabledCallbacks.fire(that.tagText);
 		});
 		return false;
-	}
+	};
 	tptenhance.tags.SaveTagsTableRow.prototype.handleEnableLinkClick = function(e){
 		var pendingIndicator = $('<span><span class="label label-info" title="Enabling..."><i class="icon-refresh icon-white"></i></span></span>');
 		$(e.target).addClass("hide").before(pendingIndicator);
@@ -1341,7 +1412,7 @@ contentEval(function(){
 			tptenhance.tags.tagEnabledCallbacks.fire(that.tagText);
 		});
 		return false;
-	}
+	};
 
 	// Class to manage pagination and deletion+refreshing for a comments section (e.g. Browse/View.html or user moderation page)
 	tptenhance.comments.CommentView = function(container){
@@ -1354,12 +1425,13 @@ contentEval(function(){
 
 		var that = this;
 		$(window).bind('popstate', function(){
-			that.changePage(''+self.location);
+			that.changePage(''+window.location);
 		});
 		this.msgList = this.container.find(".MessageList");
 		this.pagination = this.container.find(".Pagination");
 		this.attachCommentHandlers();
 		this.attachPaginationHandlers();
+		this.makeSaveLinks();
 	};
 	tptenhance.comments.CommentView.prototype.attachCommentHandlers = function(){
 		var that = this;
@@ -1368,9 +1440,9 @@ contentEval(function(){
 			{
 				$(this).off('click').on('click',that.handleDeleteClick);
 				var url = $(this).attr('href');
-				var redirectUrl = (''+self.location).replace(/^http:\/\/powdertoy.co.uk/, '');
+				var redirectUrl = (''+window.location).replace(/^http:\/\/powdertoy.co.uk/, '');
 				if (url.match(/Redirect=[^&]*/))
-					url = url.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(redirectUrl))
+					url = url.replace(/Redirect=[^&]*/, 'Redirect='+encodeURIComponent(redirectUrl));
 				else if (url.indexOf('?')!==-1)
 					url += '&Redirect='+encodeURIComponent(redirectUrl);
 				else
@@ -1378,11 +1450,10 @@ contentEval(function(){
 				$(this).attr('href', url);
 			}
 		});
-		tptenhance.makeSaveLinks(this.msgList.find(".Post .Message"));
-	}
+	};
 	tptenhance.comments.CommentView.prototype.attachPaginationHandlers = function(){
 		this.pagination.find("a").off('click').on('click', this.handlePaginationClick);
-	}
+	};
 	tptenhance.comments.CommentView.prototype.handleDeleteClick = function(e){
 		var deleteLink = $(e.target);
 		var msg = deleteLink.parents(".Post");
@@ -1399,13 +1470,13 @@ contentEval(function(){
 				that.mergeComments(data);
 		});
 		return false;
-	}
+	};
 	tptenhance.comments.CommentView.prototype.extractCommentsFromResponse = function(data){
 		return $(data).find(".MessageList");
-	}
+	};
 	tptenhance.comments.CommentView.prototype.extractPaginationFromResponse = function(data){
 		return $(data).find(".Pagination").first();
-	}
+	};
 	tptenhance.comments.CommentView.prototype.mergeComments = function(data){
 		var newComments = this.extractCommentsFromResponse(data).find(".Post");
 		var existingCommentIds = [];
@@ -1429,7 +1500,12 @@ contentEval(function(){
 		});
 		$(commentArray).detach().appendTo(this.msgList);
 		this.attachCommentHandlers();
-	}
+		this.makeSaveLinks();
+	};
+
+	tptenhance.comments.CommentView.prototype.makeSaveLinks = function(){
+		tptenhance.makeSaveLinks(this.msgList.find(".Post .Message"));
+	};
 
 	tptenhance.comments.CommentView.prototype.handlePaginationClick = function(e){
 		var url = $(e.target).attr("href");
@@ -1437,7 +1513,7 @@ contentEval(function(){
 			history.pushState(null, "", url);
 		this.changePage(url);
 		return false;
-	}
+	};
 	tptenhance.comments.CommentView.prototype.changePage = function(url){
 		this.container.find("#ActionSpinner").fadeIn("fast");
 		this.wasPageChanged.value = true;
@@ -1446,20 +1522,379 @@ contentEval(function(){
 			this.commentPageRequest.abort();
 		// url = url.replace(/\.html\?/, ".json?Mode=MessagesOnly&");
 		this.commentPageRequest = $.get(url, this.handlePaginationFetched);
-	}
+	};
 	tptenhance.comments.CommentView.prototype.handlePaginationFetched = function(data){
 		this.commentPageRequest = null;
 		this.container.find("#ActionSpinner").fadeOut("fast");
-		/*$(".Pagination").html(data.Pagination);
-		$("ul.MessageList").empty();
-		$("ul.MessageList").html(data.Comments);*/
 		var newPagination = this.extractPaginationFromResponse(data);
 		this.pagination.empty().append(newPagination);
 		var newComments = this.extractCommentsFromResponse(data).find(".Post");
 		this.msgList.empty().append(newComments);
 		this.attachCommentHandlers();
 		this.attachPaginationHandlers();
-	}
+		this.makeSaveLinks();
+	};
+
+
+	tptenhance.saves.makeThumb = function(saveInfo){
+		var thumbContainer = $('<div class="savegame-outer"><div class="savegame"></div></div>');
+		var thumbImg = $('<a><img height="96" width="153"></a>');
+		thumbImg.attr("href", tptenhance.saves.viewUrl(saveInfo.ID, saveInfo.Version));
+		thumbImg.find("img").attr("src", tptenhance.saves.smallImgUrl(saveInfo.ID, saveInfo.Version));
+		var caption = $('<div class="caption"><h5><a></a></h5><span class="author"></span><span class="comments"></span>');
+		caption.find("h5 a").attr("href", tptenhance.saves.viewUrl(saveInfo.ID, saveInfo.Version)).text(saveInfo.ShortName);
+		caption.find(".author").text(saveInfo.Username);
+		if (typeof saveInfo.Version!="undefined" && saveInfo.Version)
+			caption.find(".comments").text(moment(new Date(+saveInfo.Version * 1000)).format("YYYY-MM-DD HH:mm:ss"));
+		else
+			caption.find(".comments").text(saveInfo.Comments+" comment"+(+saveInfo.Comments!=1?"s":""));
+		thumbContainer.find(".savegame").append(thumbImg).append(caption);
+		return thumbContainer;
+	};
+
+	tptenhance.saves.countSignCopies = function(signs, checkSign){
+		// Returns the number of signs in the signs array which match checkSign
+		var count = 0;
+		for (var i=0; i<signs.length; ++i)
+		{
+			if (signs[i].PlacementX==checkSign.PlacementX && signs[i].PlacementY==checkSign.PlacementY && signs[i].RawText==checkSign.RawText)
+				++count;
+		}
+	};
+
+	tptenhance.saves.addPicSignLinks = function(picContainer, signData){
+		signData.forEach(function(s){
+			var signElem;
+			if (s.Type=="Save link" || s.Type=="Thread link")
+				signElem = $('<a></a>');
+			else
+			//	other signs disabled for now (I might enable them if I can make them use the same font as TPT). Uncomment next line to enable other signs:
+				//signElem = $('<span></span>');
+				return;
+			signElem.addClass("SaveSign");
+			if (tptenhance.saves.countSignCopies(signData, s)>1)
+				signElem.addClass("DupSign");
+			signElem.css({
+				top:s.DrawY+"px",
+				left:s.DrawX+"px",
+				width:s.DrawW+"px",
+				height:s.DrawH+"px"
+			});
+			signElem.text(s.DisplayText);
+
+			if (s.Type=="Save link")
+			{
+				signElem.attr("href", tptenhance.saves.viewUrl(s.LinkID));
+				signElem.addClass("SignLink SignLink-Save");
+			}
+			else if (s.Type=="Thread link")
+			{
+				signElem.attr("href", tptenhance.forums.threadUrl(s.LinkID));
+				signElem.addClass("SignLink SignLink-Thread");
+			}
+			else if (s.Type=="Spark sign")
+			{
+				signElem.addClass("SignSpark");
+			}
+			else
+			{
+				signElem.addClass("SignPlain");
+			}
+			signElem.appendTo(picContainer);
+		});
+	};
+
+	tptenhance.saves.tabs.Container = function(container){
+		this.onBtnClick = this.onBtnClick.bind(this);
+		this.container = container;
+		this.tabs = [];
+		this.tabBtns = $('<ul class="nav nav-pills"></ul>');
+		$('<div></div>').append(this.tabBtns).css({"text-align": "center"}).appendTo(container);
+		this.tabBtns.css({"display": "inline-block", "margin-bottom":"0"});
+		this.activeTab = null;
+	};
+	tptenhance.saves.tabs.Container.prototype.addTab = function(newTab){
+		var tabInfo = {
+			obj:newTab,
+			btn:$('<li class="item"><a href=""></a></li>').appendTo(this.tabBtns),
+			container:$('<div></div>')
+		};
+		tabInfo.btnText = tabInfo.btn.find("a");
+		tabInfo.btnText.data("tabInfo", tabInfo);
+		tabInfo.btnText.on("click", this.onBtnClick);
+		this.tabs.push(tabInfo);
+		newTab.init(tabInfo);
+	};
+	tptenhance.saves.tabs.Container.prototype.onBtnClick = function(e){
+		this.tabBtns.find("li.active").removeClass("active");
+		$(e.delegateTarget).parent().addClass("active");
+
+		var newTabInfo = $(e.delegateTarget).data("tabInfo");
+		if (this.activeTab!==null)
+			this.activeTab.container.detach();
+		newTabInfo.container.appendTo(this.container);
+		this.activeTab = newTabInfo;
+		newTabInfo.obj.activate();
+		setTimeout(tptenhance.tags.tagInfoPopup.updatePosition,1);
+		return false;
+	};
+
+	tptenhance.saves.tabs.Reports = function(){};
+	tptenhance.saves.tabs.Reports.prototype.init = function(info){
+		this.info = info;
+		this.container = this.info.container;
+		this.info.btnText.text("Reports");
+	};
+	tptenhance.saves.tabs.Reports.prototype.activate = function(){
+		var that = this;
+		$.get(tptenhance.reports.viewReportUrl(currentSaveID), function(html){
+			that.container.empty();
+			var reports = tptenhance.reports.parseViewReport(html);
+			var msgList = $('<ul class="MessageList"></ul>');
+			if (reports.length)
+			{
+				reports.forEach(function(report){
+					var msg = $('<li class="Post"><div class="Meta"><span class="Author"><div class="gravatar"><div class="gravatar-inner"><img></div></div><a></a></span><span class="Date"></span></div><div class="Message"></div></li>');
+					msg.find(".gravatar-inner img").attr('src', report.UserAvatar).attr('alt', report.UserName);
+					msg.find("a").attr('href', tptenhance.users.profileUrlById(report.UserID)).text(report.UserName);
+					msg.find(".Date").text(report.ReportDate);
+					msg.find(".Message").text(report.Message);
+					msgList.append(msg);
+				});
+				tptenhance.makeSaveLinks(msgList.find(".Post .Message"), true);
+				that.container.append(msgList);
+			}
+			else
+			{
+				$('<div class="alert alert-success" style="margin-top: 10px;">This save has never been reported.</div>').appendTo(that.container);
+			}
+			that.info.btnText.text("Reports ("+reports.length+")");
+			tptenhance.tags.tagInfoPopup.updatePosition();
+		}, "html");
+	};
+
+	tptenhance.saves.tabs.Tags = function(){
+		this.activated = false;
+	};
+	tptenhance.saves.tabs.Tags.prototype.init = function(info){
+		this.info = info;
+		this.container = this.info.container;
+		this.info.btnText.text("Tags");
+	};
+	tptenhance.saves.tabs.Tags.prototype.activate = function(){
+		if (this.activated===false)
+		{
+			// TODO: click on tags in table to show other uses, button to remove all instances of a tag
+			var tagsTable = new tptenhance.tags.SaveTagsTable($(".SaveTags .Tag"));
+			this.container.append(tagsTable.tableElem);
+			this.activated = true;
+		}
+	};
+
+	tptenhance.saves.tabs.Bumps = function(){};
+	tptenhance.saves.tabs.Bumps.prototype.init = function(info){
+		this.info = info;
+		this.container = this.info.container;
+		this.info.btnText.text("Bumps");
+	};
+	tptenhance.saves.tabs.Bumps.prototype.activate = function(){
+		var that = this;
+		$.get(tptenhance.saves.infoJsonUrlPTT(currentSaveID), function(data){
+			that.container.empty();
+			var bumpList = $('<div style="text-align:center;"></div>');
+			data.BumpTimes.sort(function(a,b){return b-a;});
+			if (data.BumpTimes.length)
+			{
+				if (data.BumpTimes.length>1)
+					$('<strong>This save has been bumped at least '+data.BumpTimes.length+' times:</strong>').appendTo(bumpList);
+				else
+					$('<strong>This save has been bumped at least once:</strong>').appendTo(bumpList);
+				data.BumpTimes.forEach(function(bt) {
+					var dateText = moment(new Date(+bt * 1000)).format("DD MMM YYYY HH:mm:ss");
+					$('<div></div>').text(dateText).appendTo(bumpList);
+				});
+			}
+			else
+			{
+				bumpList.text('No record found of this save ever being published');
+			}
+			that.container.append(bumpList);
+			tptenhance.tags.tagInfoPopup.updatePosition();
+		}, "json");
+	};
+
+	tptenhance.saves.tabs.History = function(){};
+	tptenhance.saves.tabs.History.prototype.init = function(info){
+		this.info = info;
+		var container = $('<div class="thumbnails"></div><div class="Clear"></div>');
+		container.appendTo(this.info.container);
+		this.container = container.filter(".thumbnails");
+		this.info.btnText.text("History");
+	};
+	tptenhance.saves.tabs.History.prototype.activate = function(){
+		var that = this;
+		$.get(tptenhance.saves.historyJsonUrl(currentSaveID), function(data){
+			that.container.empty();
+			if (typeof data.Saves=="undefined")
+				return;
+			if (data.Saves.length)
+			{
+				for (var i=0; i<data.Saves.length; i++)
+					that.container.append(tptenhance.saves.makeThumb(data.Saves[i]));
+			}
+			else
+			{
+				$('<div class="alert" style="margin-top: 10px;">No save history found.</div>').appendTo(that.container);
+			}
+
+			tptenhance.tags.tagInfoPopup.updatePosition();
+		}, "json");
+	};
+
+	tptenhance.saves.tabs.Details = function(){};
+	tptenhance.saves.tabs.Details.prototype.init = function(info){
+		this.info = info;
+		this.container = this.info.container;
+		this.info.btnText.text("More info");
+	};
+	tptenhance.saves.tabs.Details.prototype.activate = function(){
+		var that = this;
+		$.get(tptenhance.saves.infoDetailedJsonUrlPTT(currentSaveID), function(data){
+			that.container.empty();
+			if (typeof data.Error!="undefined")
+			{
+				that.container.append($("<div></div>").addClass("alert alert-error").text(data.Error));
+			}
+			else if (!data)
+			{
+				that.container.append($("<div></div>").addClass("alert alert-error").text("Error while fetching save info"));
+			}
+			else
+			{
+				var subcontainer;
+				subcontainer = $('<div></div>');
+				that.makeElemsInfo(subcontainer, data);
+				that.container.append(subcontainer);
+
+				subcontainer = $('<div style="text-align:center;"><div class="SaveDetails-notifyOld">(data may be up to 5 minutes old)</div></div>');
+				that.makeSignsTable(subcontainer, data);
+				that.container.append(subcontainer);
+				tptenhance.saves.addPicSignLinks($(".SaveGamePicture"), data.Signs);
+			}
+			tptenhance.tags.tagInfoPopup.updatePosition();
+		}, "json");
+	};
+	tptenhance.saves.tabs.Details.prototype.makeElemsInfo = function(container, data){
+		var elemsContainer = $('<div><div class="ElemCountChart"></div></div>').appendTo(container);
+		var elemsChart = d3.select(elemsContainer.find(".ElemCountChart").get(0));
+		var totalCount = d3.sum(data.ElementCount, function(d) { return d.Count; });
+		elemsChart.selectAll("div.bar")
+		.data(data.ElementCount.sort(function(a,b){return d3.descending(a.Count,b.Count);}))
+		.enter()
+		.append("div")
+		.classed("bar", true)
+		.style("width", function(d){return (d.Count/totalCount*100)+"%";})
+		.style("background-color", function(d){return (typeof d.Colour!="undefined") ? "#"+d.Colour : "#000"; })
+		.style("color", function(d){
+			if (typeof d.Colour=="undefined")
+				return "#FFF";
+			//2*r + 3*g + b
+			if (2*parseInt(d.Colour.substring(0,2),16) + 3*parseInt(d.Colour.substring(2,4),16) + parseInt(d.Colour.substring(4,6),16) > 544)
+				return "#000";
+			else
+				return "#FFF";
+		})
+		.each(function(d){
+			var nametxt;
+			if (typeof d.Name!="undefined")
+				nametxt = d.Name;
+			else
+				nametxt = d.Identifier;
+			var tooltiptxt = nametxt+": "+d.Count+" ";
+			tooltiptxt += (d.Count===1) ? "particle" : "particles";
+			$(this).tooltip({title:tooltiptxt, placement:"top"});
+			$(this).append($("<span class=\"barlabel\"></span>").text(nametxt));
+		});
+		elemsChart.append("div").classed("Clear", true);
+	};
+	tptenhance.saves.tabs.Details.prototype.makeSignsTable = function(container, data){
+		var signsTbl = $('<table cellspacing="0" cellpadding="0" style="margin:0 auto;" class="SignsTbl"><thead><tr><th>Position</th><th>Displayed text</th><th>Sign type</th></tr></thead><tbody></tbody></table>');
+		var signsTblBody = signsTbl.find('tbody');
+		data.Signs.sort(function(a,b){return a.PlacementY*10000-b.PlacementY*10000+a.PlacementX-b.PlacementX;});
+		if (data.Signs.length)
+		{
+			data.Signs.forEach(function(s){
+				var row = $('<tr></tr>');
+				if (tptenhance.saves.countSignCopies(data.Signs, s)>1)
+					row.addClass("DupSign");
+				$('<td></td>').text(s.PlacementX+','+s.PlacementY).appendTo(row);
+				if (s.Type=="Save link" || s.Type=="Thread link")
+				{
+					var cell, url;
+					if (s.Type=="Save link")
+					{
+						url = tptenhance.saves.viewUrl(s.LinkID);
+						cell = $('<td></td>').appendTo(row);
+						$('<a></a>').text(s.DisplayText).attr('href', url).appendTo(cell);
+
+						cell = $('<td></td>').text(s.Type+': ').appendTo(row);
+						$('<a></a>').text(s.LinkID).attr('href', url).appendTo(cell);
+						var thumb = $('<img>').attr('src', tptenhance.saves.smallImgUrl(s.LinkID));
+						$('<a class="SignLinkSaveThumb"></a>').append(thumb).attr('href', url).appendTo(cell);
+					}
+					else if (s.Type=="Thread link")
+					{
+						url = tptenhance.forums.threadUrl(s.LinkID);
+						cell = $('<td></td>').appendTo(row);
+						$('<a></a>').text(s.DisplayText).attr('href', url).appendTo(cell);
+
+						cell = $('<td></td>').text(s.Type+': ').appendTo(row);
+						$('<a></a>').text(s.LinkID).attr('href', url).appendTo(cell);
+					}
+				}
+				else if (s.Type=="Spark sign")
+				{
+					$('<td></td>').text(s.DisplayText).appendTo(row);
+					$('<td></td>').text(s.Type).appendTo(row);
+				}
+				else
+				{
+					$('<td></td>').text(s.RawText).appendTo(row);
+					$('<td></td>').text(s.Type).appendTo(row);
+				}
+				row.appendTo(signsTblBody);
+			});
+			container.append(signsTbl);
+		}
+	};
+
+	tptenhance.saves.tabs.Search = function(){};
+	tptenhance.saves.tabs.Search.prototype.init = function(info){
+		this.info = info;
+		this.info.btnText.text("Search similar");
+
+		var container = $('<div><strong>Search for similar saves by:</strong><br></div>').css({"text-align":"center"});
+		$('<a></a>')
+			.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:title "+$(".Title").attr('title').trim()))
+			.text("Title")
+			.append('<br>')
+			.appendTo(container);
+		$('<a></a>')
+			.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("search:similartitle "+$(".Title").attr('title').trim()))
+			.text("Similar title")
+			.append('<br>')
+			.appendTo(container);
+		if ($(".SaveDescription").text().trim()!="No Description provided.")
+		{
+			$('<a></a>')
+				.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:desc "+$(".SaveDescription").text().trim()))
+				.text("Description")
+				.append('<br>')
+				.appendTo(container);
+		}
+		this.info.container.append(container);
+	};
+	tptenhance.saves.tabs.Search.prototype.activate = function(){};
 
 
 
@@ -1501,7 +1936,7 @@ contentEval(function(){
 			tptenhance.tags.attachHandlers($("div.Tag"));
 
 			tptenhance.comments.commentView = new tptenhance.comments.CommentView($(".Subpage"));
-			
+
 			/*
 			 * Existing submit hook:
 		if(reason.length < 2){
@@ -1510,18 +1945,18 @@ contentEval(function(){
 		}
 		if(timespan.length > 0 && !isNumber(timespan)) {
 			alert("Ban time must be a number");
-			return false;	
+			return false;
 		}
 		if(parseFloat(timespan) < 0 || timetype == "p"){
 			return confirm("Are you sure you want to permanently ban this user, all the user's saves will be locked.");
 		}
-			* 
+			*
 			* This is replaced by the function below because:
-			* a) It's buggy. timespan=0 or timespan="" produces a perm ban without confirmation. 
-			* b) confirm isn't really necessary if several actions (changing the timespan dropdown value and clicking the ban button) have already been taken to indicate that yes, a perm ban is desired. 
-			*    Yeah, maybe an accidental perm ban while mashing keyboard or cat-on-keyboard is still possible, but I think it's sufficiently unlikely. 
-			*    The confirm() is a particular nuisance when trying to perm ban lots of accounts simultaneously for multiple account voting. 
-			*    Also, since pressing enter means submit for forms and OK for confirm dialogs, the confirm doesn't necessarily help if the enter button is accidentally pressed and gets stuck, or is trodden on by a cat.
+			* a) It's buggy. timespan=0 or timespan="" produces a perm ban without confirmation.
+			* b) confirm isn't really necessary if several actions (changing the timespan dropdown value and clicking the ban button) have already been taken to indicate that yes, a perm ban is desired.
+			*    An accidental perm ban may still be possible, but I think it's sufficiently unlikely.
+			*    The confirm() is a particular nuisance when trying to perm ban lots of accounts simultaneously for multiple account voting.
+			*    Also, since pressing enter means submit for forms and OK for confirm dialogs, the confirm doesn't necessarily help if the enter button is accidentally held down.
 			*/
 			$(".BanUser form").off('submit').on('submit', function(e){
 				// Try to prevent accidental perm bans
@@ -1545,6 +1980,26 @@ contentEval(function(){
 					}
 				}
 			});
+
+			var matches = window.location.toString().match(/(Name|ID)=[^&]+/);
+			if (matches)
+			{
+				$.ajax("http://powdertoythings.co.uk/Powder/User.json?"+matches[0], {
+					xhrFields: {
+						withCredentials: true
+					},
+					success:function(data) {
+						if (typeof data.User=="undefined")
+							return;
+						if (typeof data.User.SuspiciousVoteCount!="undefined")
+						{
+							$('<div class="Information"></div>')
+							.text((+data.User.SuspiciousVoteCount)+" suspicious votes logged in #powder-info")
+							.appendTo(".Record");
+						}
+					}
+				});
+			}
 		},1);});
 	}
 	if (window.location.toString().indexOf("/User.html")!=-1)
@@ -1554,17 +2009,52 @@ contentEval(function(){
 			if (matches)
 			{
 				$(".ProfileInfo > .alert-info:nth-child(2)").remove();
-				var elem = $('<div class="UserInfoRow"><label>Registered:</label> <span></span></div>');
-				elem.insertAfter($(".ProfileInfo .page-header").first());
+				var regRow = $('<div class="UserInfoRow"><label>Registered:</label> <span></span></div>');
+				regRow.insertAfter($(".ProfileInfo .page-header").first());
 				$.get("http://powdertoythings.co.uk/Powder/User.json?"+matches[0], function(data) {
 					var txt = "unknown";
-					if (typeof data.User!="undefined" && typeof data.User.RegisterTime!="undefined")
+					function timeToString(regTime)
 					{
-						var regTime = new Date(data.User.RegisterTime*1000);
-						var timeString = [('0'+regTime.getHours()).slice(-2), ('0'+regTime.getMinutes()).slice(-2), ('0'+regTime.getSeconds()).slice(-2)].join(':');
-						txt = [('0'+regTime.getDate()).slice(-2), tptenhance.monthNamesShort[regTime.getMonth()], regTime.getFullYear(), timeString].join(' ');
+						return moment(regTime).format("DD MMM YYYY HH:mm:ss");
 					}
-					elem.find("span").text(txt);
+					function boundsText(bounds)
+					{
+						if (typeof bounds.NextUser=="undefined" && typeof bounds.PrevUser=="undefined")
+							return "";
+						var txt = "registered ";
+						if (typeof bounds.PrevUser!="undefined")
+						{
+							txt += "after user "+(+bounds.PrevUser.ID)+" at "+timeToString(new Date(bounds.PrevUser.RegisterTime*1000));
+							if (typeof bounds.NextUser!="undefined")
+								txt += ", \n";
+						}
+						if (typeof bounds.NextUser!="undefined")
+						{
+							txt += "before user "+(+bounds.NextUser.ID)+" at "+timeToString(new Date(bounds.NextUser.RegisterTime*1000));
+						}
+						return txt;
+					}
+
+					if (typeof data.User!="undefined")
+					{
+						if (typeof data.User.RegisterTime!="undefined")
+						{
+							txt = timeToString(new Date(data.User.RegisterTime*1000));
+						}
+						else if (typeof data.User.RegisterTimeApprox!="undefined")
+						{
+							txt = "approx "+timeToString(new Date(data.User.RegisterTimeApprox*1000));
+							if (typeof data.User.RegisterTimeBounds!="undefined")
+							{
+								regRow.find("span").tooltip({title:"Interpolated time - "+boundsText(data.User.RegisterTimeBounds), placement:"top"});
+							}
+						}
+						else if (typeof data.User.RegisterTimeBounds!="undefined")
+						{
+							txt = "unknown ("+boundsText(data.User.RegisterTimeBounds)+")";
+						}
+					}
+					regRow.find("span").text(txt);
 				}, "json");
 				if (tptenhance.isMod())
 				{
@@ -1573,9 +2063,9 @@ contentEval(function(){
 					$(".MoreInfoForum a").each(function(){
 						if ($(this).text().indexOf("replies by")>-1)
 						{
-							var elem = $('<div class="UserInfoRow"><a></a></div>');
-							elem.find("a").attr("href", "/Discussions/Search/PostsByAuthor.html?Search_Query="+encodeURIComponent(username)).text("Find all posts by "+username+" (old version)");
-							elem.insertAfter($(this).closest(".UserInfoRow"));
+							var postsRow = $('<div class="UserInfoRow"><a></a></div>');
+							postsRow.find("a").attr("href", "/Discussions/Search/PostsByAuthor.html?Search_Query="+encodeURIComponent(username)).text("Find all posts by "+username+" (old version)");
+							postsRow.insertAfter($(this).closest(".UserInfoRow"));
 						}
 						if ($(this).text().indexOf("topics by")>-1)
 						{
@@ -1591,7 +2081,11 @@ contentEval(function(){
 	if (window.location.toString().indexOf("/Browse/View.html")!=-1)
 	{
 		$(document).ready(function(){
+			if (typeof d3=="undefined")
+				$.ajax({dataType: "script", cache: true, url: "/Themes/Next/Javascript/D3.js"});
 			setTimeout(function(){
+				window.showSaveVotes = tptenhance.saves.showVotes;
+
 				$(".Pagination a").die('click');
 				tptenhance.comments.commentView = new tptenhance.comments.CommentView($(".Subpage"));
 
@@ -1601,260 +2095,35 @@ contentEval(function(){
 					$("span.Tag").on('click', function(){
 						tptenhance.tags.tagInfoPopup.showSingle($(this), $(this).text(), currentSaveID);
 					});
-
-					var tabs = $('<ul class="nav nav-pills"></ul>');
-					tabs.css({"display": "inline-block", "margin-bottom":"0"});
-					var reportsTab = $('<li class="item"><a href="">Reports</a></li>').appendTo(tabs);
-					var tagsTab = $('<li class="item"><a href="">Tags</a></li>').appendTo(tabs); // TODO: remove all tags button, click on tags in table to show other uses, remove all instances of tag button
-					var bumpsTab = $('<li class="item"><a href="">Bumps</a></li>').appendTo(tabs);
-					var searchesTab = $('<li class="item"><a href="">Search similar</a></li>').appendTo(tabs);
-					var detailTab = $('<li class="item"><a href="">More info</a></li>').appendTo(tabs);
-
-					var tagsTable = false;
-					var currentTabLink = false;
-
-					var tabSwitch = function(newTabLink){
-						if (currentTabLink==(tagsTab.find("a")))
-						{
-							tptenhance.saveDetailsTabContent.find("table").detach();
-						}
-						currentTabLink = $(newTabLink);
-						tabs.find("li.active").removeClass("active");
-						$(newTabLink).parent().addClass("active");
-						//$("#VoteGraph").hide();
-						tptenhance.saveDetailsTabContent.empty();
-						setTimeout(tptenhance.tags.tagInfoPopup.updatePosition,1);
-					};
-
-					/*var votesShown = false;
-					votesTab.find("a").on("click", function(e){
-						tabSwitch(this);
-						$("#VoteGraph").show();
-						if (!votesShown)
-							tptenhance.saves.showVotes();
-						votesShown = true;
-						e.preventDefault();
-					});*/
-					reportsTab.find("a").on("click", function(e){
-						tabSwitch(this);
-						$.get(tptenhance.reports.viewReportUrl(currentSaveID), function(html){
-							if (currentTabLink.text()!==reportsTab.find("a").text())
-								return;
-							tptenhance.saveDetailsTabContent.empty();
-							var reports = tptenhance.reports.parseViewReport(html);
-							var msgList = $('<ul class="MessageList"></ul>');
-							if (reports.length)
-							{
-								reports.forEach(function(report){
-									var msg = $('<li class="Post"><div class="Meta"><span class="Author"><div class="gravatar"><div class="gravatar-inner"><img></div></div><a></a></span><span class="Date"></span></div><div class="Message"></div></li>');
-									msg.find(".gravatar-inner img").attr('src', report.UserAvatar).attr('alt', report.UserName);
-									msg.find("a").attr('href', tptenhance.users.profileUrlById(report.UserID)).text(report.UserName);
-									msg.find(".Date").text(report.ReportDate);
-									msg.find(".Message").text(report.Message);
-									msgList.append(msg);
-								});
-								tptenhance.makeSaveLinks(msgList.find(".Post .Message"), true);
-								tptenhance.saveDetailsTabContent.append(msgList);
-							}
-							else
-							{
-								$('<div class="alert alert-success" style="margin-top: 10px;">This save has never been reported.</div>').appendTo(tptenhance.saveDetailsTabContent);
-							}
-							reportsTab.find("a").text("Reports ("+reports.length+")");
-							tptenhance.tags.tagInfoPopup.updatePosition();
-						}, "html");
-						e.preventDefault();
-					});
-					tagsTab.find("a").on("click", function(e){
-						tabSwitch(this);
-						tptenhance.saveDetailsTabContent.empty();
-						if (tagsTable==false)
-						{
-							tagsTable = new tptenhance.tags.SaveTagsTable($(".SaveTags .Tag"));
-						}
-						tptenhance.saveDetailsTabContent.append(tagsTable.tableElem);
-						e.preventDefault();
-					});
-					bumpsTab.find("a").on("click", function(e){
-						tabSwitch(this);
-						$.get(tptenhance.saves.infoJsonUrlPTT(currentSaveID), function(data){
-							if (currentTabLink.text()!==bumpsTab.find("a").text())
-								return;
-							tptenhance.saveDetailsTabContent.empty();
-							var bumpList = $('<div style="text-align:center;"></div>');
-							data.BumpTimes.sort(function(a,b){return b-a});
-							if (data.BumpTimes.length)
-							{
-								if (data.BumpTimes.length>1)
-									$('<strong>This save has been bumped at least '+data.BumpTimes.length+' times:</strong>').appendTo(bumpList);
-								else
-									$('<strong>This save has been bumped at least once:</strong>').appendTo(bumpList);
-								data.BumpTimes.forEach(function(bt) {
-									var d = new Date(+bt * 1000);
-									var timeString = [('0'+d.getHours()).slice(-2), ('0'+d.getMinutes()).slice(-2), ('0'+d.getSeconds()).slice(-2)].join(':');
-									var dateText = [('0'+d.getDate()).slice(-2), tptenhance.monthNamesShort[d.getMonth()], d.getFullYear(), timeString].join(' ');
-									$('<div></div>').text(dateText).appendTo(bumpList);
-								});
-							}
-							else
-							{
-								bumpList.text('No record found of this save ever being published');
-							}
-							tptenhance.saveDetailsTabContent.append(bumpList);
-							tptenhance.tags.tagInfoPopup.updatePosition();
-						}, "json");
-						e.preventDefault();
-					});
-					detailTab.find("a").on("click", function(e){
-						tabSwitch(this);
-						$.get(tptenhance.saves.infoDetailedJsonUrlPTT(currentSaveID), function(data){
-							if (currentTabLink.text()!==detailTab.find("a").text())
-								return;
-							tptenhance.saveDetailsTabContent.empty();
-							if (typeof data.Error!="undefined")
-							{
-								tptenhance.saveDetailsTabContent.append($("<div></div>").addClass("alert alert-error").text(data.Error));
-							}
-							else if (data=="")
-							{
-								tptenhance.saveDetailsTabContent.append($("<div></div>").addClass("alert alert-error").text("Error while fetching save info"));
-							}
-							else
-							{
-								var container;
-								container = $('<div><div class="ElemCountChart"></div></div>');
-								var elemsChart = d3.select(container.find(".ElemCountChart").get(0));
-								var totalCount = d3.sum(data.ElementCount, function(d) { return d.Count; });
-								elemsChart.selectAll("div.bar")
-								.data(data.ElementCount.sort(function(a,b){return d3.descending(a.Count,b.Count);}))
-								.enter()
-								.append("div")
-								.classed("bar", true)
-								.style("width", function(d){return (d.Count/totalCount*100)+"%";})
-								.style("background-color", function(d){return (typeof d.Colour!="undefined") ? "#"+d.Colour : "#000"; })
-								.style("color", function(d){
-									if (typeof d.Colour=="undefined")
-										return "#FFF";
-									//2*r + 3*g + b
-									if (2*parseInt(d.Colour.substring(0,2),16) + 3*parseInt(d.Colour.substring(2,4),16) + parseInt(d.Colour.substring(4,6),16) > 544)
-										return "#000";
-									else
-										return "#FFF";
-								})
-								.each(function(d){
-									var nametxt;
-									if (typeof d.Name!="undefined")
-										nametxt = d.Name;
-									else
-										nametxt = d.Identifier;
-									var tooltiptxt = nametxt+": "+d.Count+" ";
-									tooltiptxt += (d.Count===1) ? "particle" : "particles";
-									$(this).tooltip({title:tooltiptxt, placement:"top"});
-									$(this).append($("<span class=\"barlabel\"></span>").text(nametxt));
-								});
-								elemsChart.append("div").classed("Clear", true);
-								tptenhance.saveDetailsTabContent.append(container);
-
-								container = $('<div style="text-align:center;"><div class="SaveDetails-notifyOld">(data may be up to 5 minutes old)</div></div>');
-								var signsTbl = $('<table cellspacing="0" cellpadding="0" style="margin:0 auto;" class="SignsTbl"><thead><tr><th>Position</th><th>Displayed text</th><th>Sign type</th></tr></thead><tbody></tbody></table>')
-								var signsTblBody = signsTbl.find('tbody');
-								data.Signs.sort(function(a,b){return a.PlacementY*10000-b.PlacementY*10000+a.PlacementX-b.PlacementX});
-								if (data.Signs.length)
-								{
-									data.Signs.forEach(function(s){
-										var row = $('<tr></tr>');
-										var count = 0;
-										for (var i=0; i<data.Signs.length; ++i)
-										{
-											if (data.Signs[i].PlacementX==s.PlacementX && data.Signs[i].PlacementY==s.PlacementY && data.Signs[i].RawText==s.RawText)
-												++count;
-										}
-										if (count>1)
-											row.addClass("DupSign");
-										$('<td></td>').text(s.PlacementX+','+s.PlacementY).appendTo(row);
-										if (s.Type=="Save link" || s.Type=="Thread link")
-										{
-											if (s.Type=="Save link")
-											{
-												var url = tptenhance.saves.viewUrl(s.LinkID);
-												var cell = $('<td></td>').appendTo(row);
-												$('<a></a>').text(s.DisplayText).attr('href', url).appendTo(cell);
-
-												var cell = $('<td></td>').text(s.Type+': ').appendTo(row);
-												$('<a></a>').text(s.LinkID).attr('href', url).appendTo(cell);
-												var thumb = $('<img>').attr('src', tptenhance.saves.smallImgUrl(s.LinkID));
-												$('<a class="SignLinkSaveThumb"></a>').append(thumb).attr('href', url).appendTo(cell);
-											}
-											else if (s.Type=="Thread link")
-											{
-												var url = tptenhance.forums.threadUrl(s.LinkID);
-												var cell = $('<td></td>').appendTo(row);
-												$('<a></a>').text(s.DisplayText).attr('href', url).appendTo(cell);
-
-												var cell = $('<td></td>').text(s.Type+': ').appendTo(row);
-												$('<a></a>').text(s.LinkID).attr('href', url).appendTo(cell);
-											}
-										}
-										else if (s.Type=="Spark sign")
-										{
-											$('<td></td>').text(s.DisplayText).appendTo(row);
-											$('<td></td>').text(s.Type).appendTo(row);
-										}
-										else
-										{
-											$('<td></td>').text(s.RawText).appendTo(row);
-											$('<td></td>').text(s.Type).appendTo(row);
-										}
-										row.appendTo(signsTblBody);
-									});
-									container.append(signsTbl);
-								}
-								tptenhance.saveDetailsTabContent.append(container);
-							}
-							tptenhance.tags.tagInfoPopup.updatePosition();
-						}, "json");
-						e.preventDefault();
-					});
-					
-					searchesTab.find("a").on("click", function(e){
-						tabSwitch(this);
-						var container = $('<div><strong>Search for similar saves by:</strong><br></div>').css({"text-align":"center"});
-						$('<a></a>')
-							.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:title "+$(".Title").attr('title').trim()))
-							.text("Title")
-							.append('<br>')
-							.appendTo(container);
-						$('<a></a>')
-							.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("search:similartitle "+$(".Title").attr('title').trim()))
-							.text("Similar title")
-							.append('<br>')
-							.appendTo(container);
-						if ($(".SaveDescription").text().trim()!="No Description provided.")
-						{
-							$('<a></a>')
-								.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:desc "+$(".SaveDescription").text().trim()))
-								.text("Description")
-								.append('<br>')
-								.appendTo(container);
-						}
-						tptenhance.saveDetailsTabContent.append(container);
-						e.preventDefault();
-					});
-
-					
-					var newDetailsPane = $('<div class="SaveDetails"></div>').insertAfter("#VoteGraph");
-					//$("#VoteGraph").remove();
-					//newDetailsPane.append(newVoteGraph.find(".Warning"));
-					$('<div></div>').append(tabs).css({"text-align": "center"}).appendTo(newDetailsPane);
-					//newDetailsPane.append(newVoteGraph);
-					tptenhance.saveDetailsTabs = tabs;
-					tptenhance.saveDetailsTabContent = $('<div></div>').appendTo(newDetailsPane);
 				}
+
+				var newDetailsPane;
+				if ($("#VoteGraph").length)
+					newDetailsPane = $('<div class="SaveDetails"></div>').insertAfter("#VoteGraph");
+				else
+					newDetailsPane = $('<div class="SaveDetails"></div>').insertAfter(".SaveDescription");
+				var infoTabs = new tptenhance.saves.tabs.Container(newDetailsPane);
+				if (tptenhance.isMod())
+				{
+					infoTabs.addTab(new tptenhance.saves.tabs.Reports());
+					infoTabs.addTab(new tptenhance.saves.tabs.Tags());
+				}
+				infoTabs.addTab(new tptenhance.saves.tabs.Bumps());
+				infoTabs.addTab(new tptenhance.saves.tabs.History());
+				infoTabs.addTab(new tptenhance.saves.tabs.Search());
+				infoTabs.addTab(new tptenhance.saves.tabs.Details());
+
 				$(".AddComment .OtherF textarea").attr("maxlength", 500);
 			},1);
 			$(".SaveDetails .Warning").addClass("alert alert-error").css("margin-bottom", "5px");
 			tptenhance.makeSaveLinks($(".SaveDescription"));
-			window.showSaveVotes = tptenhance.saves.showVotes;
+
+			var saveVersion = tptenhance.saves.getCurrentHistoryVersion();
+			if (saveVersion)
+			{
+				$(".SaveGamePicture img").attr("src", tptenhance.saves.fullImgUrl(currentSaveID, saveVersion));
+				// TODO: fix open and download links, and make it more obvious that this is an old version of the save
+			}
 		});
 	}
 	if (window.location.toString().indexOf("/Browse/Tags.html")!=-1)
@@ -1882,15 +2151,20 @@ contentEval(function(){
 					if(!window.history.pushState){
 						return true;
 					}
-					var goBack = 0;
+					var pageChangeDirection = 0;
 
 					var matchesCurrent = window.location.toString().match(/PageNum=([0-9]+)/);
 					var matchesNew = this.href.match(/PageNum=([0-9]+)/);
-					if (matchesCurrent && matchesNew && (+matchesNew[1])<(+matchesCurrent[1]))
-						goBack = 1;
+					if (matchesCurrent && matchesNew)
+					{
+						if ((+matchesNew[1])<(+matchesCurrent[1]))
+							pageChangeDirection = -1;
+						else if ((+matchesNew[1])>(+matchesCurrent[1]))
+							pageChangeDirection = 1;
+					}
 
 					var doScroll = function(){};
-					if (goBack)
+					if (pageChangeDirection==-1)
 					{
 						if ($(window).scrollTop() >= $('.Pagefooter').offset().top-$(window).height())
 						{
@@ -1906,7 +2180,7 @@ contentEval(function(){
 							};
 						}
 					}
-					else if ($(window).scrollTop() > $('.TopicTitle').offset().top)
+					else if (pageChangeDirection==1 && $(window).scrollTop() > $('.TopicTitle').offset().top)
 					{
 						doScroll = function(){
 							$(window).scrollTop(0);
@@ -1914,36 +2188,58 @@ contentEval(function(){
 					}
 					doScroll();
 
-					Link2 = this.href;
-					Link = this.href.replace(/\.html\?/, ".json?Mode=HTML&");
+					var Link2 = this.href;
+					var Link = this.href.replace(/\.html\?/, ".json?Mode=HTML&");
 					$("#ActionSpinner").fadeIn("fast");
 					$("ul.MessageList").fadeTo(200, 0.5);
 					$.get(Link, function(data){
+						console.log("page get");
 						$("#ActionSpinner").fadeOut("fast");
 						$(".Pagination").html(data.Pagination);
-						OLHeight = $('ul.MessageList').height();
+						var OLHeight = $('ul.MessageList').height();
 						$("ul.MessageList").children().addClass("QueueRemove");
 						var newTop;
-						if(goBack){
+						if(pageChangeDirection==-1){
 							$("ul.MessageList").prepend(data.Posts);
-							$("ul.MessageList").css("top", -OLHeight+"px");
+							$("ul.MessageList").css("top", -($('ul.MessageList').height()-OLHeight)+"px");
 							newTop = 0;
-						} else {
+						} else if (pageChangeDirection===1) {
 							$("ul.MessageList").append(data.Posts);
 							newTop = (-OLHeight);
-						}
-						$(".MessageListOuter").css({"height":(+$("ul.MessageList").height()-OLHeight)+"px"});
-						ProcessMessages();
-						doScroll();
-						$("ul.MessageList").animate({
-							top: newTop
-						}, 500, function() {
-							$("ul.MessageList").fadeTo(500, 1);
+						} else if (pageChangeDirection===0) {
+							$("ul.MessageList").children(".QueueRemove").remove();
+							$("ul.MessageList").append(data.Posts);
 							$("ul.MessageList").css({"top": 0});
 							$(".MessageListOuter").css({"height": "auto"});
-							$("ul.MessageList").children(".QueueRemove").remove();
-						});
-						LoadForumBlocks();
+							$("ul.MessageList").fadeTo(500, 1);
+						}
+						if (pageChangeDirection!==0)
+						{
+							$(".MessageListOuter").css({"height":(+$("ul.MessageList").height()-OLHeight)+"px"});
+							doScroll();
+							console.log("scroll done");
+							$("ul.MessageList").stop();
+							$("ul.MessageList").animate({
+								top: newTop
+							}, 500);
+							setTimeout(function() {
+								$("ul.MessageList").children(".QueueRemove").remove();
+								$("ul.MessageList").stop();
+								$("ul.MessageList").css({"top": 0});
+								$(".MessageListOuter").css({"height": "auto"});
+								$("ul.MessageList").fadeTo(500, 1);
+								console.log("done remove");
+							}, 550);
+						}
+						try
+						{
+							ProcessMessages();
+							LoadForumBlocks();
+						}
+						catch(e)
+						{
+							console.log(e);
+						}
 						if(window.history.pushState){
 							window.history.pushState("", "", Link2);
 						}
@@ -2004,7 +2300,7 @@ contentEval(function(){
 					// User profile link is broken for pending registrations, uses Name=1234 instead of either Name=JohnSmith or ID=1234
 					$(this).attr('href', $(this).attr('href').replace(/\?Name=/, "?ID="));
 				});
-				// Remove join time for pending registrations, since this seems to always be the current time. 
+				// Remove join time for pending registrations, since this seems to always be the current time.
 				$('.NewMembers .MemberJoined').remove();
 			}
 			if (window.location.toString().indexOf("/Groups/Admin/MemberRemove.html")!=-1) {
@@ -2029,7 +2325,7 @@ contentEval(function(){
 						$('html, body').animate({scrollTop: $(document).height()}, 200);
 						$("#AddReplyMessage.EditPlain").insertAtCaret("@"+Username+"!"+PostID+"\n");
 						$("#AddReplyMessage.EditWYSIWYG").tinymce().execCommand('mceInsertContent',false, "<p>@"+Username+"!"+PostID+"</p><p></p>");
-					}
+					};
 					window.GetQuote = function(PostID, Element, Username){
 						$('html, body').animate({scrollTop: $(document).height()}, 200);
 						$.get("/Groups/Thread/Post.json?Type=Raw&Post="+PostID, function(data){
@@ -2040,13 +2336,13 @@ contentEval(function(){
 								$("#AddReplyMessage.EditPlain").insertAtCaret("<p><cite>"+Username+"</cite>:</p><blockquote>"+$("#"+Element).text()+"</blockquote>");
 								$("#AddReplyMessage.EditWYSIWYG").tinymce().execCommand('mceInsertContent',false, "<p><cite>"+Username+"</cite>:</p><blockquote>"+$("#"+Element).text()+"</blockquote><p>&nbsp;</p>");
 							}
-						});	
-					}
+						});
+					};
 				}
-			}
+			};
 			$.getScript("/Applications/Application.Discussions/Javascript/jQuery.TinyMCE.js", wysiwygPrepare);
 			$.getScript("/Applications/Application.Discussions/Javascript/WYSIWYG.js", wysiwygPrepare);
-			
+
 			$('.Banned .Comment .Information').addClass("alert alert-warning").html("This post is hidden because the user is banned");
 			$('.Pagefooter .Warning').addClass("alert alert-warning");
 			$('.Member .Comment .Information, .Administrator .Comment .Information, .Moderator .Comment .Information').addClass("alert alert-warning").html("This post has been hidden");
@@ -2066,16 +2362,15 @@ contentEval(function(){
 			});
 			$('.Pageheader').prepend('<a href="/Groups/Page/Groups.html">Groups</a> &raquo;');
 			$(".HidePostButton").off('click');
-			$(".HidePostButton").on('click', function(){ 
-				InformationForm = $('<div class="Information"></div>');
-				Form = $('<form class="FullForm" method="POST" action="'+$(this).attr('href').replace(/\.html/, ".json")+'"><div class="alert">Are you sure you want to hide this post?<input type="submit" name="Hide_Hide" class="btn btn-primary btn-mini" value="Hide Post" style="float:right;"><div class="Clear"></div></div></form>');
+			$(".HidePostButton").on('click', function(){
+				var InformationForm = $('<div class="Information"></div>');
+				var Form = $('<form class="FullForm" method="POST" action="'+$(this).attr('href').replace(/\.html/, ".json")+'"><div class="alert">Are you sure you want to hide this post?<input type="submit" name="Hide_Hide" class="btn btn-primary btn-mini" value="Hide Post" style="float:right;"><div class="Clear"></div></div></form>');
 				InformationForm.html(Form);
 				$(this).parent().parent().parent().children('.Message').html(InformationForm);
 				Form.submit(function(){
-					Link = $(this).attr("action").replace(/\.html/, ".json");
-					NewData = $(this).serialize();
-					NewData = NewData+"&Hide_Hide=Hide";
-					$.post(Link, NewData, null, "json").always(function(data){
+					var Link = $(this).attr("action").replace(/\.html/, ".json");
+					var NewData = $(this).serialize()+"&Hide_Hide=Hide";
+					$.post(Link, NewData, null, "json").always(function(){
 						location.reload(true);
 					});
 					$(this).replaceWith('Hiding...<div class="AJAXSpinner"></div>');
@@ -2096,11 +2391,11 @@ contentEval(function(){
 			var threadId = $(".Pagination .active a").first().attr("href").match(/Thread=([0-9]+)/)[1];
 			$(".Post .Permalink a").each(function(){
 				var postId = $(this).attr("href").match(/Post=([0-9]+)/)[1];
-				$(this).attr("href", "/Groups/Thread/View.html?"
-					+"Thread="+encodeURIComponent(threadId)
-					+"&Group="+encodeURIComponent(groupId)
-					+"&PageNum="+encodeURIComponent(threadPageNum)
-					+"#Message="+encodeURIComponent(postId)
+				$(this).attr("href", "/Groups/Thread/View.html?"+
+					"Thread="+encodeURIComponent(threadId)+
+					"&Group="+encodeURIComponent(groupId)+
+					"&PageNum="+encodeURIComponent(threadPageNum)+
+					"#Message="+encodeURIComponent(postId)
 				);
 			});
 		});
@@ -2130,7 +2425,7 @@ contentEval(function(){
 				$("#SaveReportsList").empty();
 				reports.forEach(function(report){
 					var reportElem = $('<li class="Save panel panel-default"></li>');
-					
+
 					var thumbElem = $('<a><img class="SaveThumb"></a>');
 					thumbElem.attr("href", tptenhance.saves.viewUrl(report.SaveId));
 					thumbElem.find("img").attr("src", tptenhance.saves.smallImgUrl(report.SaveId));
@@ -2140,11 +2435,11 @@ contentEval(function(){
 					$('<a class="btn btn-warning"><i class="icon-lock icon-white"></i> Unpublish</a>').attr("href", tptenhance.reports.unpublishUrl(report.SaveId)).appendTo(actionsElem);
 					$('<a class="btn btn-success"><i class="icon-ok icon-white"></i> Mark as read</a>').attr("href", tptenhance.reports.markAsReadUrl(report.SaveId)).appendTo(actionsElem);
 					$('<a class="btn btn-primary">View reports</a>').attr("href", tptenhance.reports.viewReportUrl(report.SaveId)).appendTo(actionsElem);
-					
+
 					var titleElem = $('<div class="SaveTitleContainer outside-header"></div>');
 					unreadElem.appendTo(titleElem);
 					$('<a class="SaveTitle"></a>').attr("href", tptenhance.saves.viewUrl(report.SaveId)).text(report.SaveName).appendTo(titleElem);
-					
+
 					var detailsElem = $('<div class="DetailsContainer"></div>');
 
 					var authorElem = $('<div class="SaveDetails">Save <span class="SaveId"></span> by <span class="SaveAuthor"></span></div>')
@@ -2154,16 +2449,16 @@ contentEval(function(){
 					authorElem.prepend($('<a class="btn btn-mini">Moderation</a>').attr("href", tptenhance.users.moderationUrlByName(report.Username)));
 					authorElem.prepend($('<a class="btn btn-mini">All saves</a>').attr("href", tptenhance.users.savesUrlByName(report.Username)));
 					authorElem.prepend($('<a class="btn btn-mini">Published saves</a>').attr("href", "/Browse.html?Search_Query=sort:date+user:"+encodeURIComponent(report.Username)));
-					
+
 					thumbElem.appendTo(reportElem);
 					titleElem.appendTo(reportElem);
 
 					authorElem.appendTo(detailsElem);
 					actionsElem.appendTo(detailsElem);
 					detailsElem.appendTo(reportElem);
-					
+
 					$('<div class="Clear"></div>').appendTo(reportElem);
-					
+
 					reportElem.appendTo($("#SaveReportsList"));
 					//viewReportUrl
 				});*/
@@ -2187,11 +2482,12 @@ contentEval(function(){
 			}
 		});
 	}
-	
+
 	// Correct repository username for github button, so that number of stars displays correctly
 	if ($(".social-github iframe").length)
 		$(".social-github iframe").attr("src", $(".social-github iframe").attr("src").replace("FacialTurd", "simtr"));
-
+};
+tptenhance_init();
 });
 
 function addCss(cssString)
@@ -2247,6 +2543,8 @@ addCss('\
 .TagsTable { margin:0 auto; border:1px solid #CCC; }\
 .TagsTable td, .TagsTable th { padding:3px 6px; border:1px solid #CCC}\
 .TagsTable th { text-align:left; background-color:#DDD; }\
+.TagsTable th:nth-child(3) { text-align:center; }\
+.TagsTable th:nth-child(3) a { cursor:pointer; }\
 .TagsTable td:nth-child(1) { min-width:100px; }\
 .TagsTable td:nth-child(2) { min-width:100px; }\
 .ElemCountChart { display:flex; flex-direction:row; margin:10px 0; border:1px solid #CCC; }\
@@ -2257,7 +2555,11 @@ addCss('\
 .TagPopup-showOthers { text-align:right; clear:right; }\
 .Post.Deleting { }\
 .Post.Deleted { opacity:0.7;text-decoration:line-through; }\
-\
+.SaveGamePicture { position:relative; }\
+.SaveGamePicture .SaveSign { position:absolute; display:block; overflow:hidden; font-size:9px; line-height:12px;color:rgba(255,255,255,0); text-align:center; }\
+.SaveGamePicture .SaveSign:hover { background-color:#000; color:#FFF; }\
+.SaveGamePicture .SaveSign.SignLink:hover { color:#00BFFF; background-color:#FFF; }\
+.SaveDetails .thumbnails { margin:0; }\
 ');
 if (window.location.toString().indexOf("/Groups/")!==-1)
 {
