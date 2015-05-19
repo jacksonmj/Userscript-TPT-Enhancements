@@ -87,8 +87,25 @@ var tptenhance_init = function(){
 		// E.g. for moderation page, username of person being moderated.
 		getPageUsername:function()
 		{
-			if (window.location.pathname.toString().indexOf("/User/Moderation.html")!==-1)
+			if (window.location.pathname.toString().indexOf("/User/Moderation.html")!==-1 ||
+					window.location.toString().indexOf("/User.html")!=-1 ||
+					window.location.toString().indexOf("/User/Saves.html")!=-1)
 				return $('.SubmenuTitle').text();
+			if (window.location.pathname.toString().indexOf("/Browse.html")!==-1)
+			{
+				var matches = window.location.search.toString().match(/[?&]Search_Query=[^&]*user(?::|%3A)([^&]+)[^&]*/);
+				if (matches)
+					return matches[1];
+			}
+			return null;
+		},
+
+		// Get the username of the currently logged in user
+		getAuthedUser:function()
+		{
+			var el = $(".main-menu .pull-right .dropdown:nth-child(2) a.dropdown-toggle");
+			if (el.length)
+				return el.contents().get(0).nodeValue.trim();
 			return null;
 		},
 
@@ -468,6 +485,14 @@ var tptenhance_init = function(){
 			voteDataJsonUrl:function(id)
 			{
 				return "/IPTools/SaveVoteData.json?ID="+encodeURIComponent(id);
+			},
+			searchUrl:function(query)
+			{
+				return "/Browse.html?Search_Query="+encodeURIComponent(query);
+			},
+			userSearchUrl:function(user)
+			{
+				return tptenhance.saves.searchUrl("user:"+user);
 			},
 			getCurrentHistoryVersion:function()
 			{
@@ -2481,12 +2506,46 @@ var tptenhance_init = function(){
 	if (tptenhance.isMod() && (window.location.toString().indexOf("/User.html")!=-1 || window.location.toString().indexOf("/User/Saves.html")!=-1 || window.location.toString().indexOf("/User/Moderation.html")!=-1))
 	{
 		$(document).ready(function(){
-			var usernameElem = $(".SubmenuTitle");
-			if (usernameElem.length)
+			var username = tptenhance.getPageUsername();
+			if (username!==null)
 			{
 				var tabElem = $('<li class=\"item\"><a>Published</a></li>');
-				tabElem.find("a").attr("href", "/Browse.html?Search_Query=user:"+encodeURIComponent(usernameElem.text()));
+				tabElem.find("a").attr("href", tptenhance.saves.userSearchUrl(username));
 				tabElem.insertAfter($(".Pageheader .nav li:nth-child(2)"));
+			}
+		});
+	}
+	if (window.location.pathname.toString().indexOf("/Browse.html")!==-1)
+	{
+		$(document).ready(function(){
+			var user = tptenhance.getPageUsername();
+			if (user!==null)
+			{
+				var header = $('<div class="Pageheader Submenu"><h1 class="SubmenuTitle"></h1><ul class="nav nav-tabs"></ul></div>');
+				header.find("h1").text(user);
+				var headerNav = header.find("ul");
+
+				function newTab(container, text, url)
+				{
+					var tab = $('<li class="item"><a></a></li>').appendTo(container);
+					tab.find("a").text(text).attr("href", url);
+					return tab;
+				}
+				newTab(headerNav, "Profile", tptenhance.users.profileUrlByName(user));
+				if (tptenhance.isMod() || user===tptenhance.getAuthedUser())
+				{
+					newTab(headerNav, "Saves", tptenhance.users.savesUrlByName(user));
+					newTab(headerNav, "Published", tptenhance.saves.userSearchUrl(user)).addClass("active");
+				}
+				else
+				{
+					newTab(headerNav, "Saves", tptenhance.users.savesUrlByName(user));
+				}
+				if (tptenhance.isMod())
+					newTab(headerNav, "Moderation", tptenhance.users.moderationUrlByName(user));
+				if (user===tptenhance.getAuthedUser())
+					headerNav.append('<li class="item"><a href="/Groups/Page/Index.html">Groups</a></li><li class="item"><a href="/Profile.html">Edit</a></li>');
+				$('#PageBrowse').prepend(header);
 			}
 		});
 	}
@@ -2568,6 +2627,7 @@ addCss('\
 .SaveGamePicture .SaveSign:hover { background-color:#000; color:#FFF; }\
 .SaveGamePicture .SaveSign.SignLink:hover { color:#00BFFF; background-color:#FFF; }\
 .SaveDetails .thumbnails { margin:0; }\
+#PageBrowse .Submenu h1 { float:right; font-size:20px; line-height: 34px; margin-right: 5px; }\
 ');
 if (window.location.toString().indexOf("/Groups/")!==-1)
 {
