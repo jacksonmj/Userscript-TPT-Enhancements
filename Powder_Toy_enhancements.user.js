@@ -51,7 +51,7 @@ var tptenhance_init = function(){
 
 	if (typeof $ == "undefined" || typeof moment == "undefined") // check jQuery and other libraries have loaded
 	{
-		setTimeout(tptenhance_init, 1000);
+		setTimeout(tptenhance_init, 20);
 		return;
 	}
 
