@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.36
+// @version		2.37
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
