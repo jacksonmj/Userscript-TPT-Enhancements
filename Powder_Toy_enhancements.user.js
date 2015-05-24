@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.37
+// @version		2.38
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
@@ -22,6 +22,8 @@
 
 // contentEval, from http://userscripts.org/scripts/source/100842.user.js :
 function contentEval(source) {
+  if (document.body.id==="tinymce")
+    return;
   if ('function' == typeof source) {
 	source = '(' + source + ')();';
   }
@@ -33,6 +35,8 @@ function contentEval(source) {
 }
 
 function addScript(url) {
+  if (document.body.id==="tinymce")
+    return;
   var script = document.createElement('script');
   script.setAttribute("type", "application/javascript");
   script.setAttribute("src", url);
