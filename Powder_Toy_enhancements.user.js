@@ -64,6 +64,7 @@ var tptenhance_init = function(){
 		// used by several functions to replace clicked "Delete" links to show that a request is in progress / finished
 		deletingHtml:'<div class="pull-right label label-info"><i class="icon-refresh icon-white"></i> <strong>Deleting...</strong></div>',
 		deletedHtml:'<div class="pull-right label label-success"><i class="icon-ok icon-white"></i> <strong>Deleted</strong></div>',
+		doneLabelHtml:'<div class="label label-success"><i class="icon-ok icon-white"></i> <strong>Done</strong></div>',
 
 		// a random page to use for redirects, which will hopefully load faster than the default redirect (e.g. to a user moderation page) in ajax requests
 		dummyUrl:"/Themes/Next/Javascript/Browse.View.js",
@@ -1698,7 +1699,17 @@ var tptenhance_init = function(){
 					msgList.append(msg);
 				});
 				tptenhance.makeSaveLinks(msgList.find(".Post .Message"), true);
-				that.container.append(msgList);
+
+				var markReadBtn = $('<div class="pull-right" style="z-index:2;position: relative;padding:10px;"><a class="btn btn-success"><i class="icon-ok icon-white"></i> Mark all as read</a></div>');
+				markReadBtn.find("a").attr("href", tptenhance.reports.markAsReadUrl(currentSaveID)).on("click", function(e){
+					$(this).addClass("disabled");
+					$.get(this.href, function(){
+						markReadBtn.empty();
+						markReadBtn.append(tptenhance.doneLabelHtml);
+					});
+					return false;
+				});
+				that.container.append(markReadBtn).append(msgList);
 			}
 			else
 			{
@@ -2141,7 +2152,10 @@ var tptenhance_init = function(){
 				var infoTabs = new tptenhance.saves.tabs.Container(newDetailsPane);
 				if (tptenhance.isMod())
 				{
-					infoTabs.addTab(new tptenhance.saves.tabs.Reports());
+					var reportTab = new tptenhance.saves.tabs.Reports();
+					infoTabs.addTab(reportTab);
+					if (window.location.hash==="#Reports")
+						reportTab.info.btn.find("a").click();
 					infoTabs.addTab(new tptenhance.saves.tabs.Tags());
 				}
 				infoTabs.addTab(new tptenhance.saves.tabs.Bumps());
@@ -2457,6 +2471,12 @@ var tptenhance_init = function(){
 				$(".SaveReports li a img").each(function(){
 					var saveId = $(this).attr("src").match(/[0-9]+/)[0];
 					$(this).attr("src", tptenhance.saves.smallImgUrl(saveId));
+				});
+				$(".SaveReports li a:first-child").each(function(){
+					var url = $(this).attr("href");
+					if (url.indexOf("#Reports")===-1)
+						url += "#Reports";
+					$(this).attr("href", url);
 				});
 				/* WIP, not finished yet
 				$("#SaveReportsList").empty();
