@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.38
+// @version		2.39
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
@@ -98,7 +98,7 @@ var tptenhance_init = function(){
 				return $('.SubmenuTitle').text();
 			if (window.location.pathname.toString().indexOf("/Browse.html")!==-1)
 			{
-				var matches = window.location.search.toString().match(/[?&]Search_Query=[^&]*user(?::|%3A)([^&]+)[^&]*/);
+				var matches = window.location.search.toString().match(/[?&]Search_Query=[^&]*user(?::|%3A)([^ +&]+)[^ +&]*/);
 				if (matches)
 					return matches[1];
 			}
