@@ -2394,15 +2394,7 @@ var tptenhance_init = function(){
 			$.getScript("/Applications/Application.Discussions/Javascript/jQuery.TinyMCE.js", wysiwygPrepare);
 			$.getScript("/Applications/Application.Discussions/Javascript/WYSIWYG.js", wysiwygPrepare);
 
-			$('.Banned .Comment .Information').addClass("alert alert-warning").html("This post is hidden because the user is banned");
 			$('.Pagefooter .Warning').addClass("alert alert-warning");
-			$('.Member .Comment .Information, .Administrator .Comment .Information, .Moderator .Comment .Information').addClass("alert alert-warning").html("This post has been hidden");
-			$('.Comment .Actions .ButtonLink').addClass('btn-mini');
-			$('.Comment .Actions').removeClass('Actions').addClass('Actions2');// to stop groups CSS on site from overriding bootstrap button styles
-			$('.Post.Moderator').each(function(){
-				if ($(this).find(".Meta .UserTitle").text()=="Member")
-					$(this).find(".Meta .UserTitle").text("Moderator");
-			});
 			$('form input[type="submit"]').addClass('btn');
 			$('form input[type="submit"]').each(function(){
 				var txt = $(this).attr('value');
@@ -2412,43 +2404,75 @@ var tptenhance_init = function(){
 				if (txt=="Post") $(this).addClass('btn-primary').css('margin-top', '5px');
 			});
 			$('.Pageheader').prepend('<a href="/Groups/Page/Groups.html">Groups</a> &raquo;');
-			$(".HidePostButton").off('click');
-			$(".HidePostButton").on('click', function(){
-				var InformationForm = $('<div class="Information"></div>');
-				var Form = $('<form class="FullForm" method="POST" action="'+$(this).attr('href').replace(/\.html/, ".json")+'"><div class="alert">Are you sure you want to hide this post?<input type="submit" name="Hide_Hide" class="btn btn-primary btn-mini" value="Hide Post" style="float:right;"><div class="Clear"></div></div></form>');
-				InformationForm.html(Form);
-				$(this).parent().parent().parent().children('.Message').html(InformationForm);
-				Form.submit(function(){
-					var Link = $(this).attr("action").replace(/\.html/, ".json");
-					var NewData = $(this).serialize()+"&Hide_Hide=Hide";
-					$.post(Link, NewData, null, "json").always(function(){
-						location.reload(true);
+
+			var fixGroupPosts = function()
+			{
+				$('.ButtonLink').addClass('btn');
+				$('.Banned .Comment .Information').addClass("alert alert-warning").html("This post is hidden because the user is banned");
+				$('.Member .Comment .Information, .Administrator .Comment .Information, .Moderator .Comment .Information').addClass("alert alert-warning").html("This post has been hidden");
+				$('.Comment .Actions .ButtonLink').addClass('btn-mini');
+				$('.Comment .Actions').removeClass('Actions').addClass('Actions2');// to stop groups CSS on site from overriding bootstrap button styles
+				$('.Post.Moderator').each(function(){
+					if ($(this).find(".Meta .UserTitle").text()=="Member")
+						$(this).find(".Meta .UserTitle").text("Moderator");
+				});
+				$(".HidePostButton").off('click');
+				$(".HidePostButton").on('click', function(){
+					var currentPost = $(this).parents(".Post");
+					var messageId = currentPost.find(".Message").attr("id");
+					var url = $(this).attr('href').replace(/\.html/, ".json");
+					$.post(url, "Hide_Hide=Hide").success(function(){
+						$.get(location, function(data){
+							var newPost = $(data).find(".Message#"+messageId).parents(".Post");
+							currentPost.replaceWith(newPost);
+							fixGroupPosts();
+						});
 					});
-					$(this).replaceWith('Hiding...<div class="AJAXSpinner"></div>');
+					$(this).text('Hiding...').addClass("disabled");
 					return false;
 				});
-				return false;
-			});
-			var groupId = tptenhance.groups.currentGroupId();
-			$(".Post a").each(function(){
-				if ($(this).text()!="(View Post)") return;
-				var matches = $(this).attr('href').match(/\/Discussions\/Thread\/View.html\?Post=([0-9]+)$/);
-				if (matches)
-				{
-					$(this).attr('href', "/Groups/Thread/View.html?Post="+encodeURIComponent(matches[1])+"&Group="+encodeURIComponent(groupId));
-				}
-			});
-			var threadPageNum = $(".Pagination .active a").first().attr("href").match(/PageNum=([0-9]+)/)[1];
-			var threadId = $(".Pagination .active a").first().attr("href").match(/Thread=([0-9]+)/)[1];
-			$(".Post .Permalink a").each(function(){
-				var postId = $(this).attr("href").match(/Post=([0-9]+)/)[1];
-				$(this).attr("href", "/Groups/Thread/View.html?"+
-					"Thread="+encodeURIComponent(threadId)+
-					"&Group="+encodeURIComponent(groupId)+
-					"&PageNum="+encodeURIComponent(threadPageNum)+
-					"#Message="+encodeURIComponent(postId)
-				);
-			});
+				$(".UnhidePostButton").off('click');
+				$(".UnhidePostButton").on('click', function(){
+					var actionButton = $(this);
+					$.get(actionButton.attr("href"), function(){
+						$.get(location, function(data){
+							var currentPost = actionButton.parents(".Post");
+							var messageId = currentPost.find(".Message").attr("id");
+							var newPost = $(data).find(".Message#"+messageId).parents(".Post");
+							currentPost.replaceWith(newPost);
+							fixGroupPosts();
+						});
+					});
+					$(this).text('Unhiding...').addClass("disabled");
+					return false;
+				});
+				var groupId = tptenhance.groups.currentGroupId();
+				$(".Post a").each(function(){
+					if ($(this).text()!="(View Post)") return;
+					var matches = $(this).attr('href').match(/\/Discussions\/Thread\/View.html\?Post=([0-9]+)$/);
+					if (matches)
+					{
+						$(this).attr('href', "/Groups/Thread/View.html?Post="+encodeURIComponent(matches[1])+"&Group="+encodeURIComponent(groupId));
+					}
+				});
+				var threadPageNum = $(".Pagination .active a").first().attr("href").match(/PageNum=([0-9]+)/)[1];
+				var threadId = $(".Pagination .active a").first().attr("href").match(/Thread=([0-9]+)/)[1];
+				// Fix permalinks, since the default ones don't link to the correct page
+				$(".Post .Permalink a").each(function(){
+					var matches = $(this).attr("href").match(/Post=([0-9]+)/);
+					if (matches)
+					{
+						var postId = matches[1];
+						$(this).attr("href", "/Groups/Thread/View.html?"+
+							"Thread="+encodeURIComponent(threadId)+
+							"&Group="+encodeURIComponent(groupId)+
+							"&PageNum="+encodeURIComponent(threadPageNum)+
+							"#Message="+encodeURIComponent(postId)
+						);
+					}
+				});
+			};
+			fixGroupPosts();
 		});
 	}
 	if (window.location.toString().indexOf("/Reports/View.html")!=-1)
