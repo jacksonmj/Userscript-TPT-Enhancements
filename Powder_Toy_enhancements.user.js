@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.41
+// @version		2.42
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
@@ -42,11 +42,6 @@ function addScript(url) {
   script.setAttribute("src", url);
   document.body.appendChild(script);
 }
-
-
-// Fix silly way of checking whether facebook stuff is loaded (Browse.View.js:3, "if(FB)")
-// If facebook is blocked, then the javascript on powdertoy.co.uk errors and does not execute important stuff like callbacks for showing tag info popups
-contentEval('if (typeof window.FB == "undefined") window.FB = false;');
 
 addScript("//cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.2/moment.min.js");
 
@@ -869,7 +864,7 @@ var tptenhance_init = function(){
 					otherText.children().remove();
 					otherText = otherText.text().split("\"");
 					var duration = otherText.shift().replace("\s+$","").toLowerCase();
-					if (duration.indexOf("permanently")!=-1 || duration.indexOf("permenantly")!=-1)
+					if (duration.indexOf("permanently")!=-1)
 						duration = 0;
 					else if (duration.indexOf("hour")!=-1)
 						duration = 60*60*(+duration.split(" ")[0]);
@@ -1943,16 +1938,6 @@ var tptenhance_init = function(){
 	};
 	tptenhance.saves.tabs.Search.prototype.activate = function(){};
 
-
-
-	$(document).ready(function(){
-		if (tptenhance.isMod())
-		{
-			// Add a menu link for editing the changelog on the download page.
-			$(".main-menu .pull-right .dropdown:first-child .dropdown-menu").append('<li class="item"><a href="/Documentation/Changelog.html">Changelog</a>');
-		}
-	});
-
 	if (window.location.toString().indexOf("/User/Moderation.html")!=-1)
 	{
 		$(document).ready(function(){setTimeout(function(){
@@ -1972,10 +1957,6 @@ var tptenhance_init = function(){
 					tagRemover.start();
 				});
 			}
-			$(".BanHistory ul").each(function(){
-				// Spelling...
-				$(this).html($(this).html().replace(/Permenantly/, "Permanently"));
-			});
 			$("span.TagText").on('click', function(){
 				var currentUsername = $('.SubmenuTitle').text();
 				tptenhance.tags.tagInfoPopup.showAll($(this), $(this).text(), currentUsername);
@@ -2055,54 +2036,6 @@ var tptenhance_init = function(){
 			var matches = window.location.toString().match(/(Name|ID)=.+/);
 			if (matches)
 			{
-				$(".ProfileInfo > .alert-info:nth-child(2)").remove();
-				var regRow = $('<div class="UserInfoRow"><label>Registered:</label> <span></span></div>');
-				regRow.insertAfter($(".ProfileInfo .page-header").first());
-				$.get("http://powdertoythings.co.uk/Powder/User.json?"+matches[0], function(data) {
-					var txt = "unknown";
-					function timeToString(regTime)
-					{
-						return moment(regTime).format("DD MMM YYYY HH:mm:ss");
-					}
-					function boundsText(bounds)
-					{
-						if (typeof bounds.NextUser=="undefined" && typeof bounds.PrevUser=="undefined")
-							return "";
-						var txt = "registered ";
-						if (typeof bounds.PrevUser!="undefined")
-						{
-							txt += "after user "+(+bounds.PrevUser.ID)+" at "+timeToString(new Date(bounds.PrevUser.RegisterTime*1000));
-							if (typeof bounds.NextUser!="undefined")
-								txt += ", \n";
-						}
-						if (typeof bounds.NextUser!="undefined")
-						{
-							txt += "before user "+(+bounds.NextUser.ID)+" at "+timeToString(new Date(bounds.NextUser.RegisterTime*1000));
-						}
-						return txt;
-					}
-
-					if (typeof data.User!="undefined")
-					{
-						if (typeof data.User.RegisterTime!="undefined")
-						{
-							txt = timeToString(new Date(data.User.RegisterTime*1000));
-						}
-						else if (typeof data.User.RegisterTimeApprox!="undefined")
-						{
-							txt = "approx "+timeToString(new Date(data.User.RegisterTimeApprox*1000));
-							if (typeof data.User.RegisterTimeBounds!="undefined")
-							{
-								regRow.find("span").tooltip({title:"Interpolated time - "+boundsText(data.User.RegisterTimeBounds), placement:"top"});
-							}
-						}
-						else if (typeof data.User.RegisterTimeBounds!="undefined")
-						{
-							txt = "unknown ("+boundsText(data.User.RegisterTimeBounds)+")";
-						}
-					}
-					regRow.find("span").text(txt);
-				}, "json");
 				if (tptenhance.isMod())
 				{
 					// Add links to the old user post/topic search pages
@@ -2162,8 +2095,6 @@ var tptenhance_init = function(){
 				infoTabs.addTab(new tptenhance.saves.tabs.History());
 				infoTabs.addTab(new tptenhance.saves.tabs.Search());
 				infoTabs.addTab(new tptenhance.saves.tabs.Details());
-
-				$(".AddComment .OtherF textarea").attr("maxlength", 500);
 			},1);
 			$(".SaveDetails .Warning").addClass("alert alert-error").css("margin-bottom", "5px");
 			tptenhance.makeSaveLinks($(".SaveDescription"));
@@ -2250,6 +2181,7 @@ var tptenhance_init = function(){
 						var OLHeight = $('ul.MessageList').height();
 						$("ul.MessageList").children().addClass("QueueRemove");
 						var newTop;
+						console.log("pagechange "+pageChangeDirection);
 						if(pageChangeDirection==-1){
 							$("ul.MessageList").prepend(data.Posts);
 							$("ul.MessageList").css("top", -($('ul.MessageList').height()-OLHeight)+"px");
@@ -2281,6 +2213,7 @@ var tptenhance_init = function(){
 								$("ul.MessageList").fadeTo(500, 1);
 								console.log("done remove");
 							}, 550);
+							console.log("remove queued");
 						}
 						try
 						{
@@ -2300,22 +2233,6 @@ var tptenhance_init = function(){
 			},1);
 		});
 	}
-	if (window.location.toString().indexOf("/Discussions/Thread/HidePost.html")!=-1)
-	{
-		$(document).ready(function(){
-			// To fix the site redirecting to the first page of the thread instead of the page with the post when a post is hidden
-			// submit form via Ajax request then redirect to the correct page ourselves
-			$('.FullForm').on('submit', function(e){
-				e.preventDefault();
-				$(this).find(".btn.btn-primary").addClass("disabled").attr("value", "Hiding...");
-				var formData = $(this).serialize();
-				formData += "&Hide_Hide=Hide+Post";
-				$.post($(this).attr('action'), formData, function(){
-					window.location = '/Discussions/Thread/View.html?'+(window.location.search.match(/Post=[0-9]+/)[0]);
-				});
-			});
-		});
-	}
 	if (window.location.toString().indexOf("/Groups/")!=-1)
 	{
 		$(document).ready(function(){
@@ -2329,30 +2246,6 @@ var tptenhance_init = function(){
 			$('.SubmitF input[type="submit"]').addClass('btn btn-primary');
 			if (window.location.toString().indexOf("/Groups/Page/Register.html")!=-1) {
 				$('form input[type="submit"]').addClass('btn btn-primary').css('margin', '10px 0');
-			}
-			if (window.location.toString().indexOf("/Groups/Admin/Members.html")!=-1) {
-				$('.MemberActions a.btn').each(function(){
-					// Add icons and colours to buttons
-					$(this).addClass("btn-mini");
-					if ($(this).text()=="Accept")
-					{
-						$(this).addClass("btn-success").prepend('<i class="icon-ok icon-white"></i> ');
-					}
-					if ($(this).text()=="Reject")
-					{
-						$(this).addClass("btn-danger").prepend('<i class="icon-remove icon-white"></i> ');
-					}
-					if ($(this).text()=="Remove")
-					{
-						$(this).addClass("btn-danger").html('<i class="icon-remove icon-white"></i>');
-					}
-				});
-				$('.NewMembers a.MemberName').each(function(){
-					// User profile link is broken for pending registrations, uses Name=1234 instead of either Name=JohnSmith or ID=1234
-					$(this).attr('href', $(this).attr('href').replace(/\?Name=/, "?ID="));
-				});
-				// Remove join time for pending registrations, since this seems to always be the current time.
-				$('.NewMembers .MemberJoined').remove();
 			}
 			if (window.location.toString().indexOf("/Groups/Admin/MemberRemove.html")!=-1) {
 				// Prettier removal confirmation button
@@ -2398,8 +2291,6 @@ var tptenhance_init = function(){
 			$('form input[type="submit"]').addClass('btn');
 			$('form input[type="submit"]').each(function(){
 				var txt = $(this).attr('value');
-				if (txt=="Stick" || txt=="Unstick") $(this).addClass('btn-info');
-				if (txt=="Delete Thread") $(this).addClass('btn-danger');
 				if (txt=="Save") $(this).addClass('btn-primary');
 				if (txt=="Post") $(this).addClass('btn-primary').css('margin-top', '5px');
 			});
@@ -2597,10 +2488,6 @@ var tptenhance_init = function(){
 			}
 		});
 	}
-
-	// Correct repository username for github button, so that number of stars displays correctly
-	if ($(".social-github iframe").length)
-		$(".social-github iframe").attr("src", $(".social-github iframe").attr("src").replace("FacialTurd", "simtr"));
 };
 tptenhance_init();
 });
