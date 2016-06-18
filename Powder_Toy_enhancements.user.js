@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.42
+// @version		2.43
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
@@ -397,7 +397,6 @@ var tptenhance_init = function(){
 					var reasonHtml = $(this);
 					reportMsgs.push({
 						UserAvatar:reasonHtml.find(".Meta .Author img").attr("src"),
-						UserID:reasonHtml.find(".Meta .Author a:last-child").attr("href").match(/ID=[0-9]+/)[0].split("=")[1],
 						UserName:reasonHtml.find(".Meta .Author a:last-child").text().trim(),
 						ReportDate:reasonHtml.find(".Meta .Date").text().trim(),
 						Message:reasonHtml.find(".Message").text().trim()
@@ -1688,7 +1687,7 @@ var tptenhance_init = function(){
 				reports.forEach(function(report){
 					var msg = $('<li class="Post"><div class="Meta"><span class="Author"><div class="gravatar"><div class="gravatar-inner"><img></div></div><a></a></span><span class="Date"></span></div><div class="Message"></div></li>');
 					msg.find(".gravatar-inner img").attr('src', report.UserAvatar).attr('alt', report.UserName);
-					msg.find("a").attr('href', tptenhance.users.profileUrlById(report.UserID)).text(report.UserName);
+					msg.find("a").attr('href', tptenhance.users.profileUrlByName(report.UserName)).text(report.UserName);
 					msg.find(".Date").text(report.ReportDate);
 					msg.find(".Message").text(report.Message);
 					msgList.append(msg);
