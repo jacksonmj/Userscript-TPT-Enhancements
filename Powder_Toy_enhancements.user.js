@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.43
+// @version		2.44
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
@@ -156,6 +156,17 @@ var tptenhance_init = function(){
 					return +(deleteLink.attr("href").match(/DeleteComment=[0-9]+/)[0].split("=")[1]);
 				else
 					return null;
+			},
+			add:function(saveId, commentText)
+			{
+				$.post(tptenhance.saves.viewUrl(saveId), {'Comment': commentText}, function(data){tptenhance.comments.addHandleResponse(data, saveId)});
+			},
+			addHandleResponse:function(data, saveId)
+			{
+				if (saveId == currentSaveID && typeof tptenhance.comments.commentView!=="undefined" && tptenhance.comments.commentView.getSelectedPage()===1)
+				{
+					tptenhance.comments.commentView.mergeComments(data);
+				}
 			}
 		},
 		tags:
@@ -330,7 +341,10 @@ var tptenhance_init = function(){
 					msg.append($('<span></span>').text(text.slice(prevLastIndex, result.index)));
 					// Turn the match into a link
 					var link = $('<a></a>');
-					link.attr('href', tptenhance.saves.viewUrl(result[0].match(/[0-9]+/)[0]));
+					var saveId = result[0].match(/[0-9]+/)[0];
+					link.attr('href', tptenhance.saves.viewUrl(saveId));
+					link.addClass('AutoSaveLink');
+					link.attr('data-saveid', saveId);
 					link.text(result[0]);
 					msg.append(link);
 					// store the position of the end of the match
@@ -500,6 +514,43 @@ var tptenhance_init = function(){
 					return +matches[1];
 				else
 					return null;
+			},
+			promoState:{
+				Featured:2,
+				Promoted:1,
+				Normal:0,
+				Demoted:-1,
+				Disabled:-2
+			},
+			handleModActionsResponse:function(data, saveId)
+			{
+				if (saveId==currentSaveID)
+				{
+					$(".ModActions").replaceWith($(data).find(".ModActions"));
+				}
+			},
+			setPromoState:function(saveId, promoState)
+			{
+				if (!tptenhance.isMod())
+					return;
+				var url = tptenhance.saves.viewUrl(saveId) + '&Key=' + tptenhance.getSessionKey();
+				$.post(url, {'PromoState':promoState}, function(data){
+					tptenhance.saves.handleModActionsResponse(data, saveId);
+				});
+			},
+			unpublish:function(saveId)
+			{
+				var url = tptenhance.saves.viewUrl(saveId) + '&Key=' + tptenhance.getSessionKey();
+				$.post(url, {'ActionUnpublish':1}, function(data){
+					tptenhance.saves.handleModActionsResponse(data, saveId);
+				});
+			},
+			publish:function(saveId)
+			{
+				var url = tptenhance.saves.viewUrl(saveId) + '&Key=' + tptenhance.getSessionKey();
+				$.post(url, {'ActionPublish':1}, function(data){
+					tptenhance.saves.handleModActionsResponse(data, saveId);
+				});
 			},
 			tabs:{},
 			showVotes:function()
@@ -1565,6 +1616,15 @@ var tptenhance_init = function(){
 		this.attachPaginationHandlers();
 		this.makeSaveLinks();
 	};
+	tptenhance.comments.CommentView.prototype.getSelectedPage = function(){
+		// Find the 1-indexed page number
+		var pageLink = this.pagination.find(".active a");
+		if (pageLink.length && $.isNumeric(pageLink.text()))
+		{
+			return +pageLink.text();
+		}
+		return 1;
+	};
 
 
 	tptenhance.saves.makeThumb = function(saveInfo){
@@ -1635,6 +1695,134 @@ var tptenhance_init = function(){
 		});
 	};
 
+	tptenhance.saves.ReportActionsController = function(reportedSaveId, reportData, reportHtml){
+		this.reportedSaveId = reportedSaveId;
+		this.reportData = reportData;
+		this.reportHtml = reportHtml;
+		this.actionsContainer = $('<div class="" style="clear:both;"></div>');
+		this.reportHtml.find(".Meta").after(this.actionsContainer);
+		for (var reportAction in tptenhance.saves.reportActions)
+		{
+			var newAction = new tptenhance.saves.reportActions[reportAction](this);
+		}
+		if (this.actionsContainer.children().length)
+		{
+			this.actionsContainer.css({'padding-bottom':'10px'});
+		}
+	};
+	tptenhance.saves.ReportAction = function(){};
+	tptenhance.saves.ReportAction.prototype.addBtns = function()
+	{
+		this.btns = this.genBtn();
+		this.c.actionsContainer.append(this.btns);
+	};
+	tptenhance.saves.reportActions = {};
+
+
+	tptenhance.saves.reportActions.Copied = function(c){
+		this.c = c;
+		if (!this.init(c))
+			this.c = null;
+	};
+	tptenhance.saves.reportActions.Copied.prototype = Object.create(tptenhance.saves.ReportAction.prototype);
+	tptenhance.saves.reportActions.Copied.prototype.init = function()
+	{
+		var saveLinks = this.c.reportHtml.find(".AutoSaveLink");
+		var saveIds = [];
+		var that = this;
+		saveLinks.each(function(){
+			var saveLink = this;
+			var saveId = +$(saveLink).attr('data-saveid');
+			if ($.isNumeric(saveId) && saveId < that.c.reportedSaveId && saveIds.indexOf(saveId)===-1)
+			{
+				saveIds.push(saveId);
+			}
+		});
+		if (saveIds.length===1)
+		{
+			this.origSaveId = saveIds[0];
+			this.addBtns();
+			return true;
+		}
+		return false;
+	};
+	tptenhance.saves.reportActions.Copied.prototype.genBtn = function()
+	{
+		var btnView = $('<a class="btn btn-primary btn-mini" target="_blank">\
+			 <i class="icon-search icon-white"></i>\
+			 View id:'+this.origSaveId+'\
+			 </a>');
+		btnView.attr('href', tptenhance.saves.viewUrl(this.origSaveId));
+		var btnUnpub = $('<button class="btn btn-warning btn-mini">\
+			 <i class="icon-lock icon-white"></i>\
+			 Copied\
+			 </button>');
+		var btnDisable = $('<button class="btn btn-danger btn-mini">\
+			 <i class="icon-ban-circle icon-white"></i>\
+			 Copied\
+			 </button>');
+		var btnCredit = $('<button class="btn btn-warning btn-mini">\
+			 <i class="icon-lock icon-white"></i>\
+			 Give credit\
+			 </button>');
+		var btns = $('<span></span>');
+		btns.append(btnView).append('&nbsp;')
+			.append(btnDisable).append('&nbsp;')
+			.append(btnUnpub).append('&nbsp;')
+			.append(btnCredit);
+		var that = this;
+		btnDisable.on('click', function(){that.handleDisable();});
+		btnUnpub.on('click', function(){that.handleUnpub();});
+		btnCredit.on('click', function(){that.handleUnpubCredit();});
+		return btns;
+	};
+	tptenhance.saves.reportActions.Copied.prototype.handleDisable = function()
+	{
+		tptenhance.saves.setPromoState(this.c.reportedSaveId, tptenhance.saves.promoState.Disabled);
+		var that = this;
+		$.get(tptenhance.saves.infoJsonUrl(this.origSaveId), function(data){
+			if (typeof data!=="undefined" && typeof data.ID!=="undefined" && data.ID!=404)
+			{
+				that.origSave = data;
+				tptenhance.comments.add(that.c.reportedSaveId, that.getCommentMsg());
+			}
+		}, "json");
+	};
+	tptenhance.saves.reportActions.Copied.prototype.handleUnpub = function()
+	{
+		tptenhance.saves.unpublish(this.c.reportedSaveId);
+		var that = this;
+		$.get(tptenhance.saves.infoJsonUrl(this.origSaveId), function(data){
+			if (typeof data!=="undefined" && typeof data.ID!=="undefined" && data.ID!=404)
+			{
+				that.origSave = data;
+				tptenhance.comments.add(that.c.reportedSaveId, that.getCommentMsg());
+			}
+		}, "json");
+	};
+	tptenhance.saves.reportActions.Copied.prototype.handleUnpubCredit = function()
+	{
+		tptenhance.saves.unpublish(this.c.reportedSaveId);
+		var that = this;
+		$.get(tptenhance.saves.infoJsonUrl(this.origSaveId), function(data){
+			if (typeof data!=="undefined" && typeof data.ID!=="undefined" && data.ID!=404)
+			{
+				that.origSave = data;
+				tptenhance.comments.add(that.c.reportedSaveId, that.getCommentMsgCredit());
+			}
+		}, "json");
+		tptenhance.comments.add(this.c.reportedSaveId, this.getCommentMsgCredit());
+	};
+	tptenhance.saves.reportActions.Copied.prototype.getCommentMsg = function()
+	{
+		return 'Save unpublished, copy of id:'+this.origSave.ID+' "'+this.origSave.Name+'" by '+this.origSave.Username+'.';
+	};
+	tptenhance.saves.reportActions.Copied.prototype.getCommentMsgCredit = function()
+	{
+		return 'Save unpublished: copied without credit from id:'+this.origSave.ID+' (save "'+this.origSave.Name+'" by '+this.origSave.Username+'). Please give credit to the original owner when modifying saves.';
+	};
+
+
 	tptenhance.saves.tabs.Container = function(container){
 		this.onBtnClick = this.onBtnClick.bind(this);
 		this.container = container;
@@ -1691,8 +1879,9 @@ var tptenhance_init = function(){
 					msg.find(".Date").text(report.ReportDate);
 					msg.find(".Message").text(report.Message);
 					msgList.append(msg);
+					tptenhance.makeSaveLinks(msg.find(".Message"), true);
+					var rac = new tptenhance.saves.ReportActionsController(currentSaveID, report, msg);
 				});
-				tptenhance.makeSaveLinks(msgList.find(".Post .Message"), true);
 
 				var markReadBtn = $('<div class="pull-right" style="z-index:2;position: relative;padding:10px;"><a class="btn btn-success"><i class="icon-ok icon-white"></i> Mark all as read</a></div>');
 				markReadBtn.find("a").attr("href", tptenhance.reports.markAsReadUrl(currentSaveID)).on("click", function(e){
@@ -2221,6 +2410,7 @@ var tptenhance_init = function(){
 						}
 						catch(e)
 						{
+							console.log("ProcessMessages/LoadForumBlocks exception");
 							console.log(e);
 						}
 						if(window.history.pushState){
