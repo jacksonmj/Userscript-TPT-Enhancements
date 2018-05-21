@@ -5,7 +5,7 @@
 // @include	 	http*://powdertoy.co.uk/*
 // @version		2.45
 // @author		jacksonmj
-// @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
+// @license		GPL-3.0+; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
 // @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
