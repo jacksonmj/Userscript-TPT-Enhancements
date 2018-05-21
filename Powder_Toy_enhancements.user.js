@@ -3,7 +3,7 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.44
+// @version		2.45
 // @author		jacksonmj
 // @license		GPL version 3 or any later version; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
@@ -2257,13 +2257,10 @@ var tptenhance_init = function(){
 				$(".Pagination a").die('click');
 				tptenhance.comments.commentView = new tptenhance.comments.CommentView($(".Subpage"));
 
-				$("span.Tag").die('click');
-				if (tptenhance.isMod())
-				{
-					$("span.Tag").on('click', function(){
-						tptenhance.tags.tagInfoPopup.showSingle($(this), $(this).text(), currentSaveID);
-					});
-				}
+				$("span.TagAdmin").die('click');
+				$("span.TagAdmin").on('click', function(){
+					tptenhance.tags.tagInfoPopup.showSingle($(this), $(this).text(), currentSaveID);
+				});
 
 				var newDetailsPane;
 				if ($("#VoteGraph").length)
