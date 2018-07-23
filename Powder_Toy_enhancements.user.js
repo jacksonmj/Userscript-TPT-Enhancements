@@ -3,9 +3,9 @@
 // @namespace   http://powdertoythings.co.uk/tptenhance
 // @description Fix and improve some things (mainly moderation tools) on powdertoy.co.uk
 // @include	 	http*://powdertoy.co.uk/*
-// @version		2.45
+// @version		2.46
 // @author		jacksonmj
-// @license		GPL-3.0+; http://www.gnu.org/copyleft/gpl.html
+// @license		GPL-3.0-or-later; http://www.gnu.org/copyleft/gpl.html
 // @grant       none
 // @downloadURL https://openuserjs.org/install/jacksonmj/Powder_Toy_enhancements.user.js
 // ==/UserScript==
@@ -439,9 +439,9 @@ var tptenhance_init = function(){
 			dataUrl:function(id, historyVersion)
 			{
 				if (typeof historyVersion=="undefined" || !historyVersion)
-					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+".cps";
+					return window.location.protocol+"//static.powdertoy.co.uk/"+encodeURIComponent(id)+".cps";
 				else
-					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+".cps";
+					return window.location.protocol+"//static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+".cps";
 			},
 			smallerImgUrl:function(id, historyVersion) // 153px × 96px
 			{
@@ -454,16 +454,16 @@ var tptenhance_init = function(){
 			smallImgUrl:function(id, historyVersion) // 204px × 128px
 			{
 				if (typeof historyVersion=="undefined" || !historyVersion)
-					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_small.png";
+					return window.location.protocol+"//static.powdertoy.co.uk/"+encodeURIComponent(id)+"_small.png";
 				else
-					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+"_small.png";
+					return window.location.protocol+"//static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+"_small.png";
 			},
 			fullImgUrl:function(id, historyVersion) // 612px × 384px
 			{
 				if (typeof historyVersion=="undefined" || !historyVersion)
-					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+".png";
+					return window.location.protocol+"//static.powdertoy.co.uk/"+encodeURIComponent(id)+".png";
 				else
-					return "http://static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+".png";
+					return window.location.protocol+"//static.powdertoy.co.uk/"+encodeURIComponent(id)+"_"+encodeURIComponent(historyVersion)+".png";
 			},
 			viewUrl:function(id, historyVersion)
 			{
@@ -481,11 +481,11 @@ var tptenhance_init = function(){
 			},
 			infoJsonUrlPTT:function(id)
 			{
-				return "http://powdertoythings.co.uk/Powder/Saves/View.json?ID="+encodeURIComponent(id);
+				return window.location.protocol+"//powdertoythings.co.uk/Powder/Saves/View.json?ID="+encodeURIComponent(id);
 			},
 			infoDetailedJsonUrlPTT:function(id)
 			{
-				return "http://powdertoythings.co.uk/Powder/Saves/ViewDetailed.json?ID="+encodeURIComponent(id);
+				return window.location.protocol+"//powdertoythings.co.uk/Powder/Saves/ViewDetailed.json?ID="+encodeURIComponent(id);
 			},
 			historyJsonUrl:function(id)
 			{
@@ -2105,19 +2105,19 @@ var tptenhance_init = function(){
 
 		var container = $('<div><strong>Search for similar saves by:</strong><br></div>').css({"text-align":"center"});
 		$('<a></a>')
-			.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:title "+$(".Title").attr('title').trim()))
+			.attr('href', '//powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:title "+$(".Title").attr('title').trim()))
 			.text("Title")
 			.append('<br>')
 			.appendTo(container);
 		$('<a></a>')
-			.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("search:similartitle "+$(".Title").attr('title').trim()))
+			.attr('href', '//powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("search:similartitle "+$(".Title").attr('title').trim()))
 			.text("Similar title")
 			.append('<br>')
 			.appendTo(container);
 		if ($(".SaveDescription").text().trim()!="No Description provided.")
 		{
 			$('<a></a>')
-				.attr('href', 'http://powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:desc "+$(".SaveDescription").text().trim()))
+				.attr('href', '//powdertoythings.co.uk/Powder/Saves/Search.html?Search_Query='+encodeURIComponent("sort:id search:desc "+$(".SaveDescription").text().trim()))
 				.text("Description")
 				.append('<br>')
 				.appendTo(container);
@@ -2200,7 +2200,7 @@ var tptenhance_init = function(){
 			var matches = window.location.toString().match(/(Name|ID)=[^&]+/);
 			if (matches)
 			{
-				$.ajax("http://powdertoythings.co.uk/Powder/User.json?"+matches[0], {
+				$.ajax(window.location.protocol+"//powdertoythings.co.uk/Powder/User.json?"+matches[0], {
 					xhrFields: {
 						withCredentials: true
 					},
